@@ -69,7 +69,7 @@
     #file-name { color: var(--text); }
     #log-line { color: var(--muted); font-size: 0.9rem; margin: 0.6rem 0 0; }
     #log-line:empty { display: none; }
-    #progress-status { text-align: center; color: var(--muted); font-size: 0.9rem; margin: 1.5rem 0 0.5rem; }
+    #progress summary { text-align: center; color: var(--muted); font-size: 0.9rem; margin: 1.5rem 0 0.5rem; cursor: pointer; }
     .grids { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 1.5rem; }
     .grids h2 { font-size: 0.9rem; font-weight: 600; color: var(--muted); margin: 0.75rem 0 0.4rem; }
     .grid { display: grid; grid-template-columns: 1rem repeat(7, 2rem); grid-auto-rows: 2rem; gap: 2px; }
@@ -118,14 +118,14 @@
 
 <p id="score"></p>
 
-<section id="progress">
-    <p id="progress-status"></p>
+<details id="progress">
+    <summary>Progress · <span id="progress-status"></span></summary>
     <div class="grids">
         <div><h2>Up</h2><div id="grid-up" class="grid"></div></div>
         <div><h2>Down</h2><div id="grid-down" class="grid"></div></div>
         <div><h2>Repeats</h2><div id="grid-same" class="grid"></div></div>
     </div>
-</section>
+</details>
 </main>
 
 <script>
@@ -511,8 +511,11 @@ const CADENCE = [
 ];
 const CHORD_GAP = 0.9;
 const CHORD_DURATION = 0.85;
-const FINAL_CHORD_DURATION = 1.6;
-const DRONE_LEAD = 1.5;
+const FINAL_CHORD_DURATION = 1.0;
+// The first note comes this long after the final chord of the cadence starts
+const CADENCE_TO_NOTES = 1.4;
+// With the drone on and no cadence, the notes wait for the drone's 0.8 s fade-in
+const DRONE_LEAD = 0.8;
 // Each note sounds for this fraction of the gap between notes; below 1 so a repeated note is released before it is struck again
 const NOTE_LENGTH = 0.875;
 const SCHEDULE_LEAD = 0.05;
@@ -652,13 +655,18 @@ function play(withCadence) {
     const start = transport.seconds + SCHEDULE_LEAD;
 
     let droneStart = start;
+    let melodyStart = start;
     if (withCadence) {
         CADENCE.forEach((chord, i) => {
             const notes = chord.map((offset) => toNote(tonic + offset));
             const duration = i === CADENCE.length - 1 ? FINAL_CHORD_DURATION : CHORD_DURATION;
             schedulePiano(notes, start + i * CHORD_GAP, duration, 0.6);
         });
-        droneStart = start + (CADENCE.length - 1) * CHORD_GAP + FINAL_CHORD_DURATION;
+        // The drone fades in under the final chord
+        droneStart = start + (CADENCE.length - 1) * CHORD_GAP;
+        melodyStart = droneStart + CADENCE_TO_NOTES;
+    } else if (droneCheckbox.checked) {
+        melodyStart = start + DRONE_LEAD;
     }
 
     // The sampler plays each note from the nearest sample, and samples sit every 3 semitones (C, D#, F#, A)
@@ -671,7 +679,6 @@ function play(withCadence) {
         }
     }, droneStart);
 
-    const melodyStart = droneStart + DRONE_LEAD;
     const noteGap = 60 / Number(tempoInput.value);
     const noteDuration = noteGap * NOTE_LENGTH;
     midis.forEach((midi, i) => {
