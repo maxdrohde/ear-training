@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ear Training</title>
+<style>
+    :root {
+        color-scheme: light dark;
+        --bg: #f6f6f4;
+        --card: #ffffff;
+        --text: #1f2328;
+        --muted: #6b7280;
+        --border: #d8d8d4;
+        --accent: #3b5bdb;
+        --accent-text: #ffffff;
+        --correct-bg: #dcf3e2;
+        --correct-border: #4fae6d;
+        --wrong-bg: #fae0e0;
+        --wrong-border: #d65a55;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --bg: #16181c;
+            --card: #1f2227;
+            --text: #e6e6e6;
+            --muted: #9aa0a6;
+            --border: #3a3e45;
+            --accent: #7c93ff;
+            --accent-text: #0e1116;
+            --correct-bg: #1d3826;
+            --correct-border: #4caf6a;
+            --wrong-bg: #3f2326;
+            --wrong-border: #e06c6c;
+        }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.45; }
+    main { max-width: 36rem; margin: 3rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.35rem; font-weight: 600; margin: 0 0 1.25rem; }
+    button, select, input { font: inherit; }
+    .settings { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; padding: 0.9rem 1rem; background: var(--card); border: 1px solid var(--border); border-radius: 10px; color: var(--muted); font-size: 0.95rem; }
+    .settings label { display: flex; align-items: center; gap: 0.4rem; }
+    select, input[type="number"] { color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.25rem 0.4rem; }
+    input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
+    #length-input { width: 3.5rem; }
+    #tempo-input { width: 14rem; max-width: 40vw; }
+    #tempo-value { min-width: 2.2rem; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+    button { color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.55rem 0.95rem; cursor: pointer; }
+    button:hover:not(:disabled) { border-color: var(--accent); }
+    button:disabled { opacity: 0.4; cursor: default; }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+    .shortcut { opacity: 0.65; font-size: 0.85em; }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.25rem 0; }
+    #status { text-align: center; font-size: 1.1rem; min-height: 1.6em; margin: 1.75rem 0 1rem; }
+    #slots { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; min-height: 3rem; }
+    .slot { width: 3rem; height: 3rem; display: grid; place-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 8px; font-size: 1.3rem; }
+    .correct { background: var(--correct-bg); border-color: var(--correct-border); }
+    .wrong { background: var(--wrong-bg); border-color: var(--wrong-border); }
+    #answer { text-align: center; color: var(--muted); min-height: 1.5em; margin: 0.75rem 0 1.5rem; }
+    #degrees { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; }
+    #degrees button { font-size: 1.35rem; padding: 0.8rem 0; }
+    .undo-row { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
+    #undo { font-size: 0.9rem; padding: 0.35rem 0.8rem; }
+    #score { text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 2rem; }
+    .settings input:disabled { opacity: 0.45; }
+    #choose-file, #new-file { font-size: 0.9rem; padding: 0.35rem 0.8rem; }
+    #file-name { color: var(--text); }
+    #log-line { color: var(--muted); font-size: 0.9rem; margin: 0.6rem 0 0; }
+    #log-line:empty { display: none; }
+    #progress-status { text-align: center; color: var(--muted); font-size: 0.9rem; margin: 1.5rem 0 0.5rem; }
+    .grids { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 1.5rem; }
+    .grids h2 { font-size: 0.9rem; font-weight: 600; color: var(--muted); margin: 0.75rem 0 0.4rem; }
+    .grid { display: grid; grid-template-columns: 1rem repeat(7, 2rem); grid-auto-rows: 2rem; gap: 2px; }
+    .axis { display: grid; place-items: center; color: var(--muted); font-size: 0.75rem; }
+    .cell { display: grid; place-items: center; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 5px; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+    .cell.locked { background: none; opacity: 0.5; }
+    .cell.passing { background: color-mix(in srgb, var(--accent) 22%, var(--card)); border-color: color-mix(in srgb, var(--accent) 45%, var(--card)); }
+</style>
+</head>
+<body>
+<main>
+<h1>Scale degree ear training</h1>
+
+<div class="settings">
+    <label><input id="pair-checkbox" type="checkbox" checked> Pair training</label>
+    <label>Notes <input id="length-input" type="number" min="1" max="8" value="3"></label>
+    <label><input id="drone-checkbox" type="checkbox"> Drone</label>
+    <label>Speed <input id="tempo-input" type="range" min="40" max="200" step="5" value="75"> <span id="tempo-value">75</span> BPM</label>
+    <span><button id="choose-file">Open log file</button> <button id="new-file">New log file</button> <span id="file-name"></span></span>
+</div>
+<p id="log-line"></p>
+
+<div class="controls">
+    <button id="new-round" class="primary" disabled>New round <span class="shortcut">(Q)</span></button>
+    <button id="replay-all" disabled>Replay all <span class="shortcut">(W)</span></button>
+    <button id="replay-notes" disabled>Replay notes <span class="shortcut">(E)</span></button>
+</div>
+
+<p id="status">Loading piano…</p>
+
+<div id="slots"></div>
+<p id="answer"></p>
+
+<div id="degrees">
+    <button data-degree="1" disabled>1</button>
+    <button data-degree="2" disabled>2</button>
+    <button data-degree="3" disabled>3</button>
+    <button data-degree="4" disabled>4</button>
+    <button data-degree="5" disabled>5</button>
+    <button data-degree="6" disabled>6</button>
+    <button data-degree="7" disabled>7</button>
+</div>
+<div class="undo-row">
+    <button id="undo" disabled>Undo</button>
+</div>
+
+<p id="score"></p>
+
+<section id="progress">
+    <p id="progress-status"></p>
+    <div class="grids">
+        <div><h2>Up</h2><div id="grid-up" class="grid"></div></div>
+        <div><h2>Down</h2><div id="grid-down" class="grid"></div></div>
+        <div><h2>Repeats</h2><div id="grid-same" class="grid"></div></div>
+    </div>
+</section>
+</main>
+
+<script>
+// iPhone Safari: play through the silent switch, like a music app. Must run before Tone.js creates its audio context
+if (navigator.audioSession) {
+    navigator.audioSession.type = "playback";
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.5.42/Tone.min.js" integrity="sha512-3Yzf+4I4avnWsClLvR+r5vxjH47n2nynxA1N/+xy+drJlSjWruU+0D4EKWlKaN/wPs9FnBUb0+gozc+tnHXiRQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script id="model">
+// The pair-training model of design/final-spec.md: pure code with no DOM or Tone.js, so web-tests/ can load it in node
+const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
+const KEY_NAMES = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+// Every note lies in [tonic + LOW, tonic + HIGH]: two octaves, from the 5 below the tonic to the 5 above the upper tonic
+const LOW = -5;
+const HIGH = 19;
+const DEGREE_ORDER = [1, 5, 3, 2, 6, 4, 7];
+const START_UNITS = 2;
+const UNITS_PER_UNLOCK = 2;
+// An item passes when P(p >= BAR | data) >= CONFIDENCE
+const BAR = 0.85;
+const CONFIDENCE = 0.9;
+// Starting half-life in days, which is also its floor after a miss
+const H0 = 1;
+const DAY_MS = 86400000;
+// Pair questions per item per session
+const CAP = 20;
+const SESSION_GAP_MS = 30 * 60 * 1000;
+const QUESTIONS_PER_KEY = 10;
+const CSV_HEADER = "timestamp,round_id,batch_id,q_in_batch,mode,item,direction,key,tonic_midi,speed_bpm,drone,"
+    + "replays_all,replays_notes,position,degree,midi,answer,correct";
+
+const mod12 = (x) => ((x % 12) + 12) % 12;
+
+function randomInt(n) {
+    return Math.floor(Math.random() * n);
+}
+
+// Tonic between G3 and F#4 keeps the melody in the middle of the piano
+function tonicOf(pitchClass) {
+    return pitchClass <= 6 ? 60 + pitchClass : 48 + pitchClass;
+}
+
+// Key of a new batch: uniform over the 11 pitch classes other than the previous key, or over all 12 when there is none (-1)
+function drawPitchClass(previous) {
+    if (previous < 0) {
+        return randomInt(12);
+    }
+    return (previous + 1 + randomInt(11)) % 12;
+}
+
+// ---- Items and units (section 2)
+
+// Signed size in semitones of the move from degree a to the nearest b in the given direction ("same" = repeat)
+function semitones(a, b, direction) {
+    if (direction === "same") {
+        return 0;
+    }
+    if (direction === "up") {
+        return mod12(MAJOR_SCALE[b - 1] - MAJOR_SCALE[a - 1] - 1) + 1;
+    }
+    return -(mod12(MAJOR_SCALE[a - 1] - MAJOR_SCALE[b - 1] - 1) + 1);
+}
+
+// First-note offsets from the tonic, ascending, at which both notes fit in the register
+function placements(a, d) {
+    const offsets = [];
+    for (let x = LOW; x <= HIGH; x++) {
+        if (mod12(x - MAJOR_SCALE[a - 1]) === 0 && x + d >= LOW && x + d <= HIGH) {
+            offsets.push(x);
+        }
+    }
+    return offsets;
+}
+
+// Each new degree forms a unit with every earlier one; a degree's repeat and octave items come with its first unit
+function buildUnits() {
+    const units = [];
+    const seen = new Set();
+    DEGREE_ORDER.forEach((d, k) => {
+        for (const e of DEGREE_ORDER.slice(0, k)) {
+            const items = [`${e}-${d}-up`, `${e}-${d}-down`, `${d}-${e}-up`, `${d}-${e}-down`];
+            for (const g of [e, d]) {
+                if (!seen.has(g)) {
+                    seen.add(g);
+                    items.push(`${g}-${g}-same`, `${g}-${g}-up`, `${g}-${g}-down`);
+                }
+            }
+            units.push({ label: `{${Math.min(e, d)},${Math.max(e, d)}}`, items });
+        }
+    });
+    return units;
+}
+
+const UNITS = buildUnits();
+// The canonical item order; the unlocked items are always a prefix of it
+const ITEM_IDS = UNITS.flatMap((unit) => unit.items);
+const UNIT_OF = Object.fromEntries(UNITS.flatMap((unit, u) => unit.items.map((id) => [id, u + 1])));
+// UNIT_END[k] is the number of items in units 1 to k
+const UNIT_END = UNITS.reduce((ends, unit) => [...ends, ends[ends.length - 1] + unit.items.length], [0]);
+const ITEMS = Object.fromEntries(ITEM_IDS.map((id) => {
+    const [a, b, direction] = id.split("-");
+    return [id, { degrees: [Number(a), Number(b)], direction }];
+}));
+
+// ---- Placing a question (section 3)
+
+// The first note's octave is uniform among the placements where both notes fit
+function placeItem(id, tonic) {
+    const { degrees, direction } = ITEMS[id];
+    const d = semitones(degrees[0], degrees[1], direction);
+    const offsets = placements(degrees[0], d);
+    const x = offsets[randomInt(offsets.length)];
+    return { degrees: [...degrees], midis: [tonic + x, tonic + x + d] };
+}
+
+// Each note independently gets a uniform degree, then a uniform position of that degree in the register
+function freeQuestion(length, tonic) {
+    const degrees = Array.from({ length }, () => 1 + randomInt(7));
+    const midis = degrees.map((degree) => {
+        const positions = placements(degree, 0);
+        return tonic + positions[randomInt(positions.length)];
+    });
+    return { degrees, midis };
+}
+
+// ---- Beta tail, pass test and grid number (sections 4.5 and 4.6)
+
+const LANCZOS = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
+    -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+
+// log Gamma by the Lanczos approximation (g = 7, 9 terms); x >= 1 here
+function logGamma(x) {
+    let sum = LANCZOS[0];
+    for (let k = 1; k < LANCZOS.length; k++) {
+        sum += LANCZOS[k] / (x - 1 + k);
+    }
+    const t = x + 6.5;
+    return 0.5 * Math.log(2 * Math.PI) + (x - 0.5) * Math.log(t) - t + Math.log(sum);
+}
+
+// Continued fraction for the regularized incomplete beta function (modified Lentz; Numerical Recipes "betacf")
+function betaFraction(x, a, b) {
+    const tiny = 1e-300;
+    const guard = (v) => (Math.abs(v) < tiny ? tiny : v);
+    let c = 1;
+    let d = 1 / guard(1 - ((a + b) * x) / (a + 1));
+    let f = d;
+    for (let m = 1; m <= 1000; m++) {
+        for (const num of [(m * (b - m) * x) / ((a + 2 * m - 1) * (a + 2 * m)),
+            (-(a + m) * (a + b + m) * x) / ((a + 2 * m) * (a + 2 * m + 1))]) {
+            d = 1 / guard(1 + num * d);
+            c = guard(1 + num / c);
+            f *= d * c;
+        }
+        if (Math.abs(d * c - 1) < 1e-15) {
+            return f;
+        }
+    }
+    throw new Error(`Beta continued fraction did not converge for a = ${a}, b = ${b}`);
+}
+
+// P(p >= x) for p ~ Beta(a, b), with a, b >= 1
+function betaTail(x, a, b) {
+    const front = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log1p(-x));
+    return x < (a + 1) / (a + b + 2) ? 1 - (front * betaFraction(x, a, b)) / a : (front * betaFraction(1 - x, b, a)) / b;
+}
+
+function passes(a, b) {
+    return betaTail(BAR, a, b) >= CONFIDENCE;
+}
+
+// 10th percentile of Beta(a, b): "90% sure accuracy is at least this"
+function lowerBound(a, b) {
+    let lo = 0;
+    let hi = 1;
+    for (let k = 0; k < 40; k++) {
+        const mid = (lo + hi) / 2;
+        if (betaTail(mid, a, b) >= CONFIDENCE) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return lo;
+}
+
+// The number in a grid cell. Bisection lands just below the exact percentile, so the epsilon shows a fresh item as 10, not 9
+function shownPercent(a, b) {
+    return Math.floor(100 * lowerBound(a, b) + 1e-9);
+}
+
+// ---- Model, sessions, unlocking and selection (sections 4-7)
+
+function freshModel() {
+    return {
+        nUnits: START_UNITS,
+        items: Object.fromEntries(ITEM_IDS.map((id) => [id, { S: 0, F: 0, h: H0, t: null, n: 0, r: 0 }])),
+        // The session: pair questions per item, the item just asked and the time of the last pair answer
+        counts: {},
+        lastItem: null,
+        lastPairAnswerMs: null,
+    };
+}
+
+function unlockedIds(model) {
+    return ITEM_IDS.slice(0, UNIT_END[model.nUnits]);
+}
+
+// Weight 2^(-dt/h) of an item's evidence at nowMs; days are converted before subtracting, as in the reference
+function fade(item, nowMs) {
+    if (item.t === null) {
+        return 1;
+    }
+    const dt = Math.max(0, nowMs / DAY_MS - item.t / DAY_MS);
+    return 2 ** (-dt / item.h);
+}
+
+// Parameters of the item's faded Beta posterior at nowMs
+function belief(item, nowMs) {
+    const w = fade(item, nowMs);
+    return { a: 1 + w * item.S, b: 1 + w * item.F };
+}
+
+function itemPasses(item, nowMs) {
+    const { a, b } = belief(item, nowMs);
+    return passes(a, b);
+}
+
+// Runs at the start of every pair question; returns whether a new session started
+function startSession(model, startMs) {
+    const afterBreak = model.lastPairAnswerMs === null || startMs - model.lastPairAnswerMs > SESSION_GAP_MS;
+    const allCapped = unlockedIds(model).every((id) => (model.counts[id] ?? 0) >= CAP);
+    if (!afterBreak && !allCapped) {
+        return false;
+    }
+    model.counts = {};
+    model.lastItem = null;
+    return true;
+}
+
+// Records a pair answer (y = 1 when both notes were right) at tMs; returns whether it unlocked new units
+function recordAnswer(model, id, y, tMs) {
+    // Only a rebuild can meet an item of a locked unit; the units up to its own stay unlocked
+    model.nUnits = Math.max(model.nUnits, UNIT_OF[id]);
+    const item = model.items[id];
+    const w = fade(item, tMs);
+    item.h = y === 1 ? item.h * (2 - w) : Math.max(H0, item.h * w);
+    item.S = w * item.S + y;
+    item.F = w * item.F + (1 - y);
+    item.t = tMs;
+    item.n += 1;
+    item.r += y;
+    const unlocked = model.nUnits < UNITS.length && unlockedIds(model).every((other) => itemPasses(model.items[other], tMs));
+    if (unlocked) {
+        model.nUnits = Math.min(UNITS.length, model.nUnits + UNITS_PER_UNLOCK);
+    }
+    model.counts[id] = (model.counts[id] ?? 0) + 1;
+    model.lastItem = id;
+    model.lastPairAnswerMs = tMs;
+    return unlocked;
+}
+
+// The items the next pair question is drawn from, in canonical order, with weights (1 - L)^2, L = mean - sd
+function selectionWeights(model, nowMs) {
+    const under = unlockedIds(model).filter((id) => (model.counts[id] ?? 0) < CAP);
+    const notLast = under.filter((id) => id !== model.lastItem);
+    const allowed = notLast.length > 0 ? notLast : under;
+    const failing = allowed.filter((id) => !itemPasses(model.items[id], nowMs));
+    const pool = failing.length > 0 ? failing : allowed;
+    return pool.map((id) => {
+        const { a, b } = belief(model.items[id], nowMs);
+        const mean = a / (a + b);
+        const sd = Math.sqrt((a * b) / ((a + b) ** 2 * (a + b + 1)));
+        return { id, weight: (1 - (mean - sd)) ** 2 };
+    });
+}
+
+// The first pool item whose running sum of weights exceeds u times the total, with u uniform in [0, 1)
+function chooseItem(model, nowMs) {
+    const pool = selectionWeights(model, nowMs);
+    const total = pool.reduce((sum, entry) => sum + entry.weight, 0);
+    const target = Math.random() * total;
+    let running = 0;
+    for (const { id, weight } of pool) {
+        running += weight;
+        if (running > target) {
+            return id;
+        }
+    }
+    // Rounding can make the target equal the total
+    return pool[pool.length - 1].id;
+}
+
+// ---- The CSV log and the rebuild (sections 9 and 10)
+
+// One line per note of an answered round, each ending in "\n"
+function csvLines(round, answerMs, speedBpm, droneOn) {
+    const timestamp = new Date(answerMs).toISOString();
+    const pair = round.item === null ? "" : ITEMS[round.item].degrees.join("-");
+    const direction = round.item === null ? "" : ITEMS[round.item].direction;
+    return round.degrees.map((degree, i) => [
+        timestamp, round.id, round.batchId, round.qInBatch, round.mode, pair, direction, round.keyName, round.tonic,
+        speedBpm, droneOn ? 1 : 0, round.replaysAll, round.replaysNotes, i + 1, degree, round.midis[i], round.guesses[i],
+        round.guesses[i] === degree ? 1 : 0,
+    ].join(",") + "\n").join("");
+}
+
+const COLUMN = Object.fromEntries(CSV_HEADER.split(",").map((name, k) => [name, k]));
+
+// Replays a log through the live code (startSession, recordAnswer); throws if the log must not be used
+function rebuild(text) {
+    const result = { model: freshModel(), lastKey: null, rows: 0, pairQuestions: 0, freeQuestions: 0 };
+    if (text === "") {
+        return result;
+    }
+    // An unfinished last line would merge with the next append
+    if (!text.endsWith("\n")) {
+        throw new Error("the last line does not end in a newline");
+    }
+    const lines = text.slice(0, -1).split("\n");
+    if (lines[0] !== CSV_HEADER) {
+        throw new Error("the header differs");
+    }
+    let question = null;
+    const replay = () => {
+        if (question === null) {
+            return;
+        }
+        if (question.mode === "free") {
+            result.freeQuestions += 1;
+            return;
+        }
+        if (question.rows !== 2) {
+            throw new Error(`pair question ${question.roundId} has ${question.rows} rows`);
+        }
+        startSession(result.model, question.roundId);
+        recordAnswer(result.model, question.id, question.right ? 1 : 0, question.answerMs);
+        result.pairQuestions += 1;
+    };
+    for (const line of lines.slice(1)) {
+        const fields = line.split(",");
+        if (fields.length !== 18) {
+            throw new Error(`a row has ${fields.length} fields`);
+        }
+        const correct = fields[COLUMN.correct];
+        if (correct !== "0" && correct !== "1") {
+            throw new Error(`correct is ${correct}`);
+        }
+        const mode = fields[COLUMN.mode];
+        if (mode !== "pair" && mode !== "free") {
+            throw new Error(`mode is ${mode}`);
+        }
+        const roundId = Number(fields[COLUMN.round_id]);
+        if (question === null || roundId !== question.roundId) {
+            replay();
+            const id = `${fields[COLUMN.item]}-${fields[COLUMN.direction]}`;
+            if (mode === "pair" && !Object.hasOwn(ITEMS, id)) {
+                throw new Error(`unknown item ${id}`);
+            }
+            const answerMs = Date.parse(fields[COLUMN.timestamp]);
+            if (!Number.isInteger(roundId) || !Number.isInteger(answerMs)) {
+                throw new Error(`bad time in round ${fields[COLUMN.round_id]}`);
+            }
+            question = { roundId, mode, id, answerMs, right: true, rows: 0 };
+        }
+        question.rows += 1;
+        question.right = question.right && correct === "1";
+        result.lastKey = fields[COLUMN.key];
+        result.rows += 1;
+    }
+    replay();
+    return result;
+}
+</script>
+<script>
+// I - IV - V7 - I, as semitone offsets from the tonic (bass first)
+const CADENCE = [
+    [-12, 0, 4, 7],
+    [-7, 0, 5, 9],
+    [-5, -1, 5, 7],
+    [-12, 0, 4, 7],
+];
+const CHORD_GAP = 0.9;
+const CHORD_DURATION = 0.85;
+const FINAL_CHORD_DURATION = 1.6;
+const DRONE_LEAD = 1.5;
+// Each note sounds for this fraction of the gap between notes; below 1 so a repeated note is released before it is struck again
+const NOTE_LENGTH = 0.875;
+const SCHEDULE_LEAD = 0.05;
+const DRONE_RELEASE = 1.5;
+// Fade for notes cut off by New round or Replay, so the old key does not ring under the new cadence
+const CANCEL_FADE = 0.1;
+// Measured pitch (cents from equal temperament) of the samples the tonic is played from; the drone matches it so the two don't beat
+const SAMPLE_TUNING_CENTS = { 54: -6.5, 57: 0.9, 60: -3.0, 63: 0.1, 66: -3.2 };
+const MIN_LENGTH = 1;
+const MAX_LENGTH = 8;
+const DEFAULT_LENGTH = 3;
+const NEXT_ROUND_DELAY_MS = 1000;
+// localStorage key of the browser's copy of the log
+const LOG_KEY = "ear-training-log";
+const DEGREES = [1, 2, 3, 4, 5, 6, 7];
+
+const pairCheckbox = document.getElementById("pair-checkbox");
+const lengthInput = document.getElementById("length-input");
+const droneCheckbox = document.getElementById("drone-checkbox");
+const tempoInput = document.getElementById("tempo-input");
+const tempoValue = document.getElementById("tempo-value");
+const chooseFileButton = document.getElementById("choose-file");
+const newFileButton = document.getElementById("new-file");
+const fileNameText = document.getElementById("file-name");
+const logLine = document.getElementById("log-line");
+const newRoundButton = document.getElementById("new-round");
+const replayAllButton = document.getElementById("replay-all");
+const replayNotesButton = document.getElementById("replay-notes");
+const statusText = document.getElementById("status");
+const slotsRow = document.getElementById("slots");
+const answerText = document.getElementById("answer");
+const degreeButtons = [...document.querySelectorAll("#degrees button[data-degree]")];
+const undoButton = document.getElementById("undo");
+const scoreText = document.getElementById("score");
+const progressSection = document.getElementById("progress");
+const progressStatus = document.getElementById("progress-status");
+const gridUp = document.getElementById("grid-up");
+const gridDown = document.getElementById("grid-down");
+const gridSame = document.getElementById("grid-same");
+
+if (typeof Tone === "undefined") {
+    statusText.textContent = "Could not load the audio library. Check your internet connection and reload.";
+    throw new Error("Tone.js did not load");
+}
+
+const piano = new Tone.Sampler({
+    urls: sampleUrls(),
+    baseUrl: "https://tonejs.github.io/audio/salamander/",
+    release: 1,
+}).toDestination();
+
+const drone = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.8, decay: 0, sustain: 1, release: DRONE_RELEASE },
+    volume: -26,
+}).toDestination();
+
+const transport = Tone.getTransport();
+
+let round = null;
+let nextRoundTimer = null;
+// Tone.Sampler drops a note from _activeSources when it is released, but the note rings for another second
+let releasedSources = [];
+let droneAttackTime = 0;
+const score = { notesCorrect: 0, notesTotal: 0, roundsPerfect: 0, roundsTotal: 0 };
+// The current key batch: { id (round_id of its first question), pitchClass, questions }
+let batch = null;
+// Pitch class of the log's last row (-1 for none), which the first batch avoids
+let lastPitchClass = -1;
+let model = freshModel();
+// The log. logText is the longest known copy; the browser copy (localStorage) and the optional file are prefixes of it
+let logText = "";
+let logFailed = false;
+let browserCopyFull = false;
+let fileHandle = null;
+let fileWritable = false;
+// File reads and writes go through one promise chain, so two never overlap
+let fileChain = Promise.resolve();
+// A stored log file that Chrome will only let us use after a click
+let handleAwaitingPermission = null;
+
+function sampleUrls() {
+    const urls = {};
+    for (const octave of [2, 3, 4, 5]) {
+        for (const [note, file] of [["C", "C"], ["D#", "Ds"], ["F#", "Fs"], ["A", "A"]]) {
+            urls[`${note}${octave}`] = `${file}${octave}.mp3`;
+        }
+    }
+    urls["C6"] = "C6.mp3";
+    return urls;
+}
+
+function toNote(midi) {
+    return Tone.Frequency(midi, "midi").toNote();
+}
+
+function readLength() {
+    const value = parseInt(lengthInput.value, 10);
+    const length = Number.isNaN(value) ? DEFAULT_LENGTH : Math.min(MAX_LENGTH, Math.max(MIN_LENGTH, value));
+    lengthInput.value = length;
+    return length;
+}
+
+function stopAudio(quick) {
+    transport.cancel();
+    if (quick) {
+        // Tone.Sampler fixes each note's fade-out when the note starts, so shorten it on the notes still held
+        piano._activeSources.forEach((sources) => sources.forEach((source) => { source.fadeOut = CANCEL_FADE; }));
+        // Ramp released notes down directly: stop() would restart their fade from full volume.
+        // Start just after now: Tone treats times within 1 µs as equal, which can drop the ramp if a release is due at that instant
+        releasedSources.filter((source) => !source.disposed).forEach((source) => source.output.gain.targetRampTo(0, CANCEL_FADE, Tone.immediate() + 1e-5));
+        releasedSources = [];
+        drone.envelope.release = CANCEL_FADE;
+    }
+    piano._activeSources.forEach((sources) => releasedSources.push(...sources));
+    piano.releaseAll(Tone.immediate());
+    // The transport runs callbacks ahead of time, so a drone attack may already be queued; a release before it would be ignored
+    drone.triggerRelease(Math.max(Tone.immediate(), droneAttackTime));
+    drone.envelope.release = DRONE_RELEASE;
+}
+
+// Attack and release are separate events so releaseAll() can cut off notes that are already sounding
+function schedulePiano(notes, start, duration, velocity) {
+    transport.schedule((time) => piano.triggerAttack(notes, time, velocity), start);
+    transport.schedule((time) => {
+        [notes].flat().forEach((note) => releasedSources.push(...piano._activeSources.get(Tone.Frequency(note).toMidi())));
+        piano.triggerRelease(notes, time);
+    }, start + duration);
+}
+
+function play(withCadence) {
+    // Any playback (a new round or a replay after answering) cancels the pending automatic advance
+    clearTimeout(nextRoundTimer);
+    stopAudio(true);
+    const { tonic, midis } = round;
+    // The transport is never restarted and nothing lands on the playhead: Tone.js can skip an event at exactly the start position
+    const start = transport.seconds + SCHEDULE_LEAD;
+
+    let droneStart = start;
+    if (withCadence) {
+        CADENCE.forEach((chord, i) => {
+            const notes = chord.map((offset) => toNote(tonic + offset));
+            const duration = i === CADENCE.length - 1 ? FINAL_CHORD_DURATION : CHORD_DURATION;
+            schedulePiano(notes, start + i * CHORD_GAP, duration, 0.6);
+        });
+        droneStart = start + (CADENCE.length - 1) * CHORD_GAP + FINAL_CHORD_DURATION;
+    }
+
+    // The sampler plays each note from the nearest sample, and samples sit every 3 semitones (C, D#, F#, A)
+    const droneCents = SAMPLE_TUNING_CENTS[3 * Math.round(tonic / 3)];
+    transport.schedule((time) => {
+        if (droneCheckbox.checked) {
+            drone.detune.setValueAtTime(droneCents, time);
+            drone.triggerAttack(toNote(tonic), time);
+            droneAttackTime = time;
+        }
+    }, droneStart);
+
+    const melodyStart = droneStart + DRONE_LEAD;
+    const noteGap = 60 / Number(tempoInput.value);
+    const noteDuration = noteGap * NOTE_LENGTH;
+    midis.forEach((midi, i) => {
+        schedulePiano(toNote(midi), melodyStart + i * noteGap, noteDuration, 0.8);
+    });
+
+    // The drone keeps sounding while you answer; on a replay after answering it stops with the melody
+    const melodyEnd = melodyStart + (midis.length - 1) * noteGap + noteDuration;
+    transport.schedule((time) => {
+        if (round.answered) {
+            drone.triggerRelease(time + 0.5);
+        }
+    }, melodyEnd);
+
+    if (transport.state !== "started") {
+        transport.start();
+    }
+}
+
+function newRound() {
+    const roundId = Date.now();
+    if (batch === null || batch.questions === QUESTIONS_PER_KEY) {
+        const previous = batch === null ? lastPitchClass : batch.pitchClass;
+        batch = { id: roundId, pitchClass: drawPitchClass(previous), questions: 0 };
+    }
+    batch.questions += 1;
+    const tonic = tonicOf(batch.pitchClass);
+    let item = null;
+    let question;
+    if (pairCheckbox.checked) {
+        startSession(model, roundId);
+        item = chooseItem(model, roundId);
+        question = placeItem(item, tonic);
+    } else {
+        question = freeQuestion(readLength(), tonic);
+    }
+    round = {
+        id: roundId,
+        batchId: batch.id,
+        qInBatch: batch.questions,
+        mode: item === null ? "free" : "pair",
+        item,
+        tonic,
+        keyName: KEY_NAMES[batch.pitchClass],
+        degrees: question.degrees,
+        midis: question.midis,
+        guesses: [],
+        answered: false,
+        replaysAll: 0,
+        replaysNotes: 0,
+    };
+    render();
+    // The cadence sets the key once per batch
+    play(round.qInBatch === 1);
+}
+
+function guess(degree) {
+    round.guesses.push(degree);
+    if (round.guesses.length === round.degrees.length) {
+        finishRound();
+    }
+    render();
+}
+
+function undo() {
+    round.guesses.pop();
+    render();
+}
+
+function finishRound() {
+    round.answered = true;
+    const answerMs = Date.now();
+    const correct = round.guesses.filter((g, i) => g === round.degrees[i]).length;
+    score.notesCorrect += correct;
+    score.notesTotal += round.degrees.length;
+    score.roundsTotal += 1;
+    if (correct === round.degrees.length) {
+        score.roundsPerfect += 1;
+    }
+    logRound(answerMs, correct === round.degrees.length ? 1 : 0);
+    stopAudio();
+    nextRoundTimer = setTimeout(newRound, NEXT_ROUND_DELAY_MS);
+}
+
+// Saves the answered round to the log, then updates the model with a pair answer (final-spec.md section 12)
+function logRound(answerMs, y) {
+    if (logFailed) {
+        return;
+    }
+    const text = (logText === "" ? `${CSV_HEADER}\n` : "") + csvLines(round, answerMs, Number(tempoInput.value), droneCheckbox.checked);
+    logText += text;
+    storeBrowserCopy();
+    if (fileWritable) {
+        appendToFile(text);
+    } else if (browserCopyFull) {
+        failLog("the last answer could not be saved, because the browser's copy of the log is full and no log file is in use");
+        return;
+    }
+    if (round.mode === "pair") {
+        recordAnswer(model, round.item, y, answerMs);
+    }
+    renderProgress();
+}
+
+function storeBrowserCopy() {
+    try {
+        localStorage.setItem(LOG_KEY, logText);
+        browserCopyFull = false;
+    } catch {
+        browserCopyFull = true;
+        showLogWarning("The browser's copy of the log is full; new answers go to the log file only.");
+    }
+}
+
+function appendToFile(text) {
+    // The file in use now: choosing another file while this append waits must not redirect it
+    const handle = fileHandle;
+    fileChain = fileChain
+        .then(async () => {
+            if (!fileWritable) {
+                throw new Error("the log file is no longer in use");
+            }
+            const writable = await handle.createWritable({ keepExistingData: true });
+            await writable.seek((await handle.getFile()).size);
+            await writable.write(text);
+            await writable.close();
+        })
+        .catch(() => {
+            fileWritable = false;
+            if (browserCopyFull) {
+                failLog("the log file could not be written and the browser's copy of the log is full");
+            } else {
+                showLogWarning("Could not write to the log file; it is not used again until you reload.");
+            }
+        });
+}
+
+// Makes the file and the browser copy agree: one must be a prefix of the other, and the longer one wins
+function syncFile(handle) {
+    fileChain = fileChain
+        .then(async () => {
+            const fileText = await (await handle.getFile()).text();
+            if (logFailed) {
+                return;
+            }
+            if (!fileText.startsWith(logText) && !logText.startsWith(fileText)) {
+                failLog(`the log file ${handle.name} and the browser's copy of the log differ`);
+                return;
+            }
+            if (fileText.length > logText.length) {
+                logText = fileText;
+                // Checked before it is copied anywhere
+                if (!rebuildModel()) {
+                    return;
+                }
+                storeBrowserCopy();
+            }
+            fileHandle = handle;
+            fileWritable = true;
+            fileNameText.textContent = handle.name;
+            if (logText.length > fileText.length) {
+                appendToFile(logText.slice(fileText.length));
+            }
+            saveHandle(handle).catch(() => showLogWarning("The browser could not remember the log file; choose it again after reloading."));
+        })
+        .catch(() => showLogWarning(`Could not read the log file ${handle.name}; it is not used until you reload.`));
+    return fileChain;
+}
+
+// The failure path: pair training stays off and nothing more is written to either copy of the log
+function failLog(reason) {
+    logFailed = true;
+    fileWritable = false;
+    logLine.textContent = `Pair training is off: ${reason}. Nothing was changed.`;
+    pairCheckbox.checked = false;
+    pairCheckbox.disabled = true;
+    chooseFileButton.disabled = true;
+    newFileButton.disabled = true;
+    renderProgress();
+}
+
+function showLogWarning(text) {
+    if (!logFailed) {
+        logLine.textContent = text;
+    }
+}
+
+// Replays the whole log into the model; returns false after taking the failure path
+function rebuildModel() {
+    try {
+        const result = rebuild(logText);
+        model = result.model;
+        lastPitchClass = KEY_NAMES.indexOf(result.lastKey);
+    } catch (error) {
+        failLog(`the log could not be read (${error.message})`);
+        return false;
+    }
+    // A pair question in progress keeps the session step it started with
+    if (round !== null && !round.answered && round.mode === "pair") {
+        startSession(model, round.id);
+    }
+    renderProgress();
+    return true;
+}
+
+// The handle of the chosen log file is kept in IndexedDB
+function handleStore(mode, request) {
+    return new Promise((resolve, reject) => {
+        const opening = indexedDB.open("ear-training", 1);
+        opening.onupgradeneeded = () => opening.result.createObjectStore("handles");
+        opening.onerror = () => reject(opening.error);
+        opening.onsuccess = () => {
+            const pending = request(opening.result.transaction("handles", mode).objectStore("handles"));
+            pending.onsuccess = () => resolve(pending.result);
+            pending.onerror = () => reject(pending.error);
+        };
+    });
+}
+
+function loadHandle() {
+    return handleStore("readonly", (store) => store.get("log-file"));
+}
+
+function saveHandle(handle) {
+    return handleStore("readwrite", (store) => store.put(handle, "log-file"));
+}
+
+// Once per page load: read the browser copy, rebuild from it, then sync with the log file if it is accessible
+async function loadLog() {
+    try {
+        logText = localStorage.getItem(LOG_KEY) ?? "";
+    } catch {
+        failLog("the browser's copy of the log could not be read");
+        return;
+    }
+    if (!rebuildModel()) {
+        return;
+    }
+    const handle = await loadHandle().catch(() => {
+        showLogWarning("Could not open the saved log file; choose it again.");
+    });
+    if (handle === undefined) {
+        return;
+    }
+    fileNameText.textContent = handle.name;
+    if (await handle.queryPermission({ mode: "readwrite" }) === "granted") {
+        await syncFile(handle);
+    } else {
+        handleAwaitingPermission = handle;
+    }
+}
+
+// Chrome asks for access to a stored file only after a click, so the first New round finishes the sync
+async function askFilePermission() {
+    const handle = handleAwaitingPermission;
+    handleAwaitingPermission = null;
+    const permission = await handle.requestPermission({ mode: "readwrite" }).catch(() => "denied");
+    if (permission === "granted") {
+        await syncFile(handle);
+    } else {
+        showLogWarning(`No access to the log file ${handle.name}; it is not used until you reload.`);
+    }
+}
+
+function renderProgress() {
+    lengthInput.disabled = pairCheckbox.checked;
+    progressSection.hidden = !pairCheckbox.checked;
+    if (!pairCheckbox.checked) {
+        return;
+    }
+    const now = Date.now();
+    const unlocked = unlockedIds(model);
+    const below = unlocked.filter((id) => !itemPasses(model.items[id], now)).length;
+    if (model.nUnits === UNITS.length) {
+        progressStatus.textContent = `All pairs unlocked · ${below} of ${unlocked.length} below the bar`;
+    } else {
+        const next = UNITS.slice(model.nUnits, model.nUnits + UNITS_PER_UNLOCK).map((unit) => unit.label).join(", ");
+        progressStatus.textContent = `Pairs ${model.nUnits}/${UNITS.length} · ${below} of ${unlocked.length} items below the bar · next: ${next}`;
+    }
+    fillGrid(gridUp, DEGREES.map((a) => [a, DEGREES.map((b) => `${a}-${b}-up`)]), now);
+    fillGrid(gridDown, DEGREES.map((a) => [a, DEGREES.map((b) => `${a}-${b}-down`)]), now);
+    fillGrid(gridSame, [["", DEGREES.map((g) => `${g}-${g}-same`)]], now);
+}
+
+// Second degrees along the top; each row starts with its first degree
+function fillGrid(grid, rows, now) {
+    const axis = (text) => Object.assign(document.createElement("span"), { className: "axis", textContent: text });
+    grid.replaceChildren(axis(""), ...DEGREES.map(axis));
+    for (const [first, ids] of rows) {
+        grid.append(axis(first), ...ids.map((id) => progressCell(id, now)));
+    }
+}
+
+function progressCell(id, now) {
+    const cell = document.createElement("span");
+    cell.className = "cell";
+    if (UNIT_OF[id] > model.nUnits) {
+        cell.classList.add("locked");
+        return cell;
+    }
+    const item = model.items[id];
+    const { a, b } = belief(item, now);
+    cell.textContent = shownPercent(a, b);
+    if (passes(a, b)) {
+        cell.classList.add("passing");
+    }
+    const { degrees, direction } = ITEMS[id];
+    cell.title = `${degrees.join("-")} ${direction} · ${item.r}/${item.n} right · mean ${Math.round((100 * a) / (a + b))}% · `
+        + `P(≥ 85%) ${betaTail(BAR, a, b).toFixed(2)} · half-life ${item.h.toFixed(1)} days`;
+    return cell;
+}
+
+function render() {
+    const answering = round !== null && !round.answered;
+    // No skipping: a question must be answered before the next one starts
+    newRoundButton.disabled = answering;
+    degreeButtons.forEach((button) => { button.disabled = !answering; });
+    undoButton.disabled = !answering || round.guesses.length === 0;
+    replayAllButton.disabled = round === null;
+    replayNotesButton.disabled = round === null;
+
+    slotsRow.replaceChildren();
+    answerText.textContent = "";
+    if (round === null) {
+        statusText.textContent = "Press New round to start.";
+        return;
+    }
+
+    round.degrees.forEach((degree, i) => {
+        const slot = document.createElement("div");
+        slot.className = "slot";
+        slot.textContent = round.guesses[i] ?? "_";
+        if (round.answered) {
+            slot.classList.add(round.guesses[i] === degree ? "correct" : "wrong");
+        }
+        slotsRow.append(slot);
+    });
+
+    if (round.answered) {
+        const perfect = round.guesses.every((g, i) => g === round.degrees[i]);
+        statusText.textContent = `${round.keyName} major: ${perfect ? "Correct!" : "Not quite."}`;
+        answerText.textContent = `Answer: ${round.degrees.join(" ")}`;
+    } else {
+        statusText.textContent = `${round.keyName} major: enter ${round.degrees.length} scale degrees.`;
+    }
+
+    scoreText.textContent = `Notes ${score.notesCorrect}/${score.notesTotal} · Perfect rounds ${score.roundsPerfect}/${score.roundsTotal}`;
+}
+
+newRoundButton.addEventListener("click", async () => {
+    // The auto-advance could otherwise start a question while this click waits, and this click another
+    clearTimeout(nextRoundTimer);
+    // A second click while this one waits must not start another question
+    newRoundButton.disabled = true;
+    if (handleAwaitingPermission !== null && !logFailed) {
+        await askFilePermission();
+    }
+    await Tone.start();
+    newRound();
+});
+replayAllButton.addEventListener("click", () => {
+    if (!round.answered) {
+        round.replaysAll += 1;
+    }
+    play(true);
+});
+replayNotesButton.addEventListener("click", () => {
+    if (!round.answered) {
+        round.replaysNotes += 1;
+    }
+    play(false);
+});
+// Safari and phone browsers have no File System Access API, so the log lives only in the browser's copy there
+if (!("showOpenFilePicker" in window)) {
+    chooseFileButton.parentElement.hidden = true;
+}
+// An existing log is opened with the open picker, because the save picker empties the file it returns.
+// Chrome asks for write access at the first append
+chooseFileButton.addEventListener("click", async () => {
+    let handle;
+    try {
+        [handle] = await window.showOpenFilePicker();
+    } catch {
+        // Cancelled
+        return;
+    }
+    handleAwaitingPermission = null;
+    await syncFile(handle);
+});
+newFileButton.addEventListener("click", async () => {
+    let handle;
+    try {
+        handle = await window.showSaveFilePicker({ suggestedName: "ear-training-log.csv" });
+    } catch {
+        // Cancelled
+        return;
+    }
+    handleAwaitingPermission = null;
+    await syncFile(handle);
+});
+// Another tab's answers would be overwritten by this tab's next write
+window.addEventListener("storage", (event) => {
+    if (event.key === LOG_KEY && !logFailed) {
+        failLog("the log was changed in another tab; reload this page");
+    }
+});
+pairCheckbox.addEventListener("change", renderProgress);
+degreeButtons.forEach((button) => {
+    button.addEventListener("click", () => guess(Number(button.dataset.degree)));
+});
+undoButton.addEventListener("click", undo);
+const SHORTCUT_BUTTONS = { q: newRoundButton, w: replayAllButton, e: replayNotesButton, backspace: undoButton, delete: undoButton };
+document.addEventListener("keydown", (event) => {
+    if (event.target === lengthInput || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+    }
+    const shortcutButton = SHORTCUT_BUTTONS[event.key.toLowerCase()];
+    if (shortcutButton) {
+        // Stops the key from also doing its default action, e.g. selecting "E" in a focused key menu
+        event.preventDefault();
+        // A held key repeats; only the first press counts, except for undo, where holding it should keep undoing
+        if (!event.repeat || shortcutButton === undoButton) {
+            shortcutButton.click();
+        }
+        return;
+    }
+    const answering = round !== null && !round.answered;
+    const degree = Number(event.key);
+    if (answering && !event.repeat && degree >= 1 && degree <= 7) {
+        guess(degree);
+    }
+});
+tempoInput.addEventListener("input", () => {
+    tempoValue.textContent = tempoInput.value;
+});
+// Clicking the spinner focuses the field, and the answer and shortcut keys are ignored while it has focus
+lengthInput.addEventListener("change", () => lengthInput.blur());
+droneCheckbox.addEventListener("change", () => {
+    if (!droneCheckbox.checked) {
+        drone.triggerRelease();
+    }
+});
+
+const logLoaded = loadLog().catch((error) => failLog(`the log could not be loaded (${error.message})`));
+Tone.loaded()
+    .then(() => {
+        // Tone.loaded() can resolve even when one sample failed; the sampler checks every buffer
+        if (!piano.loaded) {
+            throw new Error("Some piano samples failed to load");
+        }
+        return logLoaded;
+    })
+    .then(() => render())
+    .catch(() => {
+        statusText.textContent = "Could not load the piano samples. Check your internet connection and reload.";
+    });
+</script>
+</body>
+</html>

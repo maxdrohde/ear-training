@@ -1,0 +1,4 @@
+# Only the web app is published (GitHub Pages); everything else stays local
+*
+!.gitignore
+!index.html
