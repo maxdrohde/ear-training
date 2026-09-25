@@ -34,6 +34,28 @@
             --wrong-border: #e06c6c;
         }
     }
+    /* Derived tokens for the pair cards */
+    :root {
+        --hairline: color-mix(in srgb, var(--border) 70%, var(--card));
+        --track: color-mix(in srgb, var(--text) 13%, transparent);
+        --well: color-mix(in srgb, var(--text) 4.5%, transparent);
+        --ghost: color-mix(in srgb, var(--text) 20%, transparent);
+        --wash: color-mix(in srgb, var(--accent) 8%, var(--card));
+        --wash-border: color-mix(in srgb, var(--accent) 26%, var(--card));
+        --lift: 0 1px 2px rgb(0 0 0 / 0.05), 0 2px 6px -2px rgb(0 0 0 / 0.05);
+        --lift-hover: 0 2px 4px rgb(0 0 0 / 0.06), 0 8px 18px -6px rgb(0 0 0 / 0.12);
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --track: color-mix(in srgb, var(--text) 16%, transparent);
+            --well: color-mix(in srgb, var(--text) 4%, transparent);
+            --ghost: color-mix(in srgb, var(--text) 24%, transparent);
+            --wash: color-mix(in srgb, var(--accent) 11%, var(--card));
+            --wash-border: color-mix(in srgb, var(--accent) 30%, var(--card));
+            --lift: none;
+            --lift-hover: 0 8px 18px -6px rgb(0 0 0 / 0.5);
+        }
+    }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.45; }
     main { max-width: 36rem; margin: 3rem auto; padding: 0 1rem; }
@@ -52,7 +74,7 @@
     button { color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.55rem 0.95rem; cursor: pointer; }
     button:hover:not(:disabled) { border-color: var(--accent); }
     button:disabled { opacity: 0.4; cursor: default; }
-    button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
     .shortcut { opacity: 0.65; font-size: 0.85em; }
     .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.25rem 0; }
@@ -66,12 +88,11 @@
     #degrees button { font-size: 1.35rem; padding: 0.8rem 0; }
     .undo-row { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
     #undo { font-size: 0.9rem; padding: 0.35rem 0.8rem; }
-    #score { text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 2rem; }
     #choose-file, #new-file { font-size: 0.9rem; padding: 0.35rem 0.8rem; }
     #file-name { color: var(--text); }
     #log-line { color: var(--muted); font-size: 0.9rem; margin: 0.6rem 0 0; }
     #log-line:empty { display: none; }
-    #progress summary { text-align: center; color: var(--muted); font-size: 0.9rem; margin: 1.5rem 0 0.5rem; cursor: pointer; }
+    #all-grids summary { width: max-content; color: var(--muted); font-size: 0.8rem; margin: 0.75rem 0.1rem 0; cursor: pointer; border-radius: 6px; }
     .grids { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 1.5rem; }
     .grids h2 { font-size: 0.9rem; font-weight: 600; color: var(--muted); margin: 0.75rem 0 0.4rem; }
     .grid { display: grid; grid-template-columns: 1rem repeat(7, 2rem); grid-auto-rows: 2rem; gap: 2px; }
@@ -79,6 +100,111 @@
     .cell { display: grid; place-items: center; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 5px; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
     .cell.locked { background: none; opacity: 0.5; }
     .cell.passing { background: color-mix(in srgb, var(--accent) 22%, var(--card)); border-color: color-mix(in srgb, var(--accent) 45%, var(--card)); }
+
+    /* ---- Pairs: a card per unlocked pair and per degree in play. A disclosure, so it can fold to one line */
+    .pairs { margin: 2rem 0 0; }
+    .pairs-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.15rem 1rem; margin: 0 0 0.35rem; list-style: none; cursor: pointer; border-radius: 6px; }
+    .pairs-head::-webkit-details-marker { display: none; }
+    .pairs-head h2 { margin: 0; font-size: 1.05rem; font-weight: 650; letter-spacing: -0.01em; }
+    .count { display: inline-flex; align-items: baseline; gap: 0.3rem; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .count strong { color: var(--text); font-weight: 600; }
+    .chevron { align-self: center; width: 0.7rem; height: 0.7rem; margin-left: 0.2rem; color: var(--muted); transition: transform 0.2s ease; }
+    .pairs[open] .chevron { transform: rotate(180deg); }
+    .pairs[open] .when-closed, .pairs:not([open]) .when-open { display: none; }
+
+    /* 8 px of headroom so a New tag never crowds the heading above, and 10 px between rows so it never covers a card */
+    .deck { --gap: 6px; list-style: none; margin: 0; padding: 8px 0 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px var(--gap); }
+    .deck li { display: grid; }
+
+    .card { position: relative; height: 56px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; background: var(--card); border: 1px solid var(--hairline); border-radius: 12px; box-shadow: var(--lift); color: var(--text); transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
+    button.card:hover { transform: translateY(-1px); box-shadow: var(--lift-hover); }
+    .label { font-size: 15px; font-weight: 600; line-height: 1; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; }
+    .dash { color: var(--muted); font-weight: 500; margin: 0 0.04em; }
+
+    /* A segmented bar: one segment per question type, filled when it passes */
+    .bars { display: flex; gap: 2px; }
+    .bars i { width: 8px; height: 4px; border-radius: 1px; background: var(--track); }
+    .bars i:first-child { border-radius: 2px 1px 1px 2px; }
+    .bars i:last-child { border-radius: 1px 2px 2px 1px; }
+    .bars i.on { background: var(--accent); }
+
+    .card.done { background: var(--wash); border-color: var(--wash-border); }
+    .card.done .label { color: var(--accent); }
+    .card.done .dash { color: inherit; opacity: 0.55; }
+    /* All passing: the segments close up into one bar */
+    .card.done .bars { gap: 0; }
+    .card.done .bars i { width: 9px; border-radius: 0; }
+    .card.done .bars i:first-child { border-radius: 2px 0 0 2px; }
+    .card.done .bars i:last-child { border-radius: 0 2px 2px 0; }
+
+    .card.new { border-color: color-mix(in srgb, var(--accent) 50%, var(--card)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent); }
+    .tag { position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%); padding: 1px 5px; border-radius: 999px; font-size: 10px; font-weight: 700; line-height: 1.3; letter-spacing: 0.05em; text-transform: uppercase; background: color-mix(in srgb, var(--accent) 14%, var(--bg)); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--bg)); }
+
+    /* Quiet placeholders: the degree that comes next, and every locked pair folded into one slot */
+    .card.ghost { background: none; border: 1px dashed var(--ghost); box-shadow: none; gap: 7px; }
+    .card.ghost .label { color: var(--muted); font-weight: 500; }
+    .hint { font-size: 10px; font-weight: 600; line-height: 1; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); opacity: 0.85; }
+    .hint svg { display: block; width: 10px; height: 10px; }
+
+    .card[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .singles { margin-top: 1rem; }
+    .singles h3 { margin: 0; color: var(--muted); font-size: 0.8rem; font-weight: 500; }
+    .singles h3 b { color: var(--text); font-weight: 600; }
+    .singles .card { height: 48px; gap: 8px; }
+
+    /* The open card's question types, under its row, with the caret over its column */
+    .deck li.detail { display: block; grid-column: 1 / -1; }
+    .detail { position: relative; margin: 0 0 2px; padding: 12px; background: var(--card); border: 1px solid var(--hairline); border-radius: 14px; box-shadow: var(--lift); }
+    .detail::before { content: ""; position: absolute; top: -6px; left: calc((100% - 6 * var(--gap)) / 7 * (var(--col) + 0.5) + var(--col) * var(--gap)); width: 10px; height: 10px; background: var(--card); border-left: 1px solid var(--hairline); border-top: 1px solid var(--hairline); transform: translateX(-50%) rotate(45deg); border-top-left-radius: 2px; }
+    .detail-head { display: flex; align-items: baseline; gap: 0.5rem; margin: 0 2px 10px; }
+    .detail-head b { font-size: 1rem; font-weight: 650; }
+    .detail-head span { color: var(--muted); font-size: 0.85rem; }
+    .detail-head .mark { margin-left: auto; font-size: 0.75rem; }
+    .types { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 6px; }
+    .type { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 9px; background: var(--well); }
+    .type.pass { background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
+    .type-name { color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .type-name b { font-weight: 400; opacity: 0.75; padding: 0 0.1em; }
+    .type-num { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .type.pass .type-num { color: var(--accent); }
+
+    /* What unlocks next, and how far away it is */
+    .next { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.75rem; margin: 1.1rem 0 0; padding: 0.7rem 0.85rem; border-radius: 12px; background: var(--well); font-size: 0.85rem; color: var(--muted); }
+    .next-label { font-weight: 500; }
+    .chips { display: flex; gap: 0.35rem; color: var(--text); }
+    .chip { padding: 0.1rem 0.5rem; border: 1px dashed var(--ghost); border-radius: 7px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .chip .dash { margin: 0 0.06em; }
+    /* On a narrow screen it wraps to its own line */
+    .togo { margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .togo strong { color: var(--text); font-weight: 600; }
+    .meter { flex-basis: 100%; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+    .meter span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transform-origin: left; animation: fill 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.3s both; }
+
+    .key { display: flex; align-items: center; gap: 0.5rem; margin: 0.75rem 0.1rem 0; color: var(--muted); font-size: 0.8rem; }
+
+    @media (min-width: 560px) {
+        .deck { --gap: 8px; }
+        .card { height: 64px; gap: 11px; border-radius: 14px; }
+        .label { font-size: 19px; }
+        .bars i { width: 10px; }
+        .card.done .bars i { width: 11px; }
+        .singles .card { height: 54px; gap: 9px; }
+    }
+
+    /* Cards deal in when they first appear; a refresh after an answer moves nothing */
+    .card.enter { animation: deal 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--i) * 22ms); }
+    .card.new { animation: glow 2.8s ease-in-out 1s infinite; }
+    .card.new.enter { animation: deal 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both, glow 2.8s ease-in-out 1s infinite; animation-delay: calc(var(--i) * 22ms), 1s; }
+    .detail.enter { animation: rise 0.25s ease both; }
+    @keyframes deal { from { opacity: 0; transform: translateY(6px) scale(0.97); } }
+    @keyframes rise { from { opacity: 0; transform: translateY(-4px); } }
+    @keyframes fill { from { transform: scaleX(0); } }
+    @keyframes glow { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); } }
+    @media (prefers-reduced-motion: reduce) {
+        .card.enter, .card.new, .card.new.enter, .detail.enter, .meter span { animation: none; }
+        .card { transition: none; }
+    }
 </style>
 </head>
 <body>
@@ -122,15 +248,37 @@
     <button id="undo" disabled>Undo</button>
 </div>
 
-<p id="score"></p>
 
-<details id="progress">
-    <summary>Progress · <span id="progress-status"></span></summary>
-    <div class="grids">
-        <div><h2>Up</h2><div id="grid-up" class="grid"></div></div>
-        <div><h2>Down</h2><div id="grid-down" class="grid"></div></div>
-        <div><h2>Repeats</h2><div id="grid-same" class="grid"></div></div>
+<details id="progress" class="pairs">
+    <summary class="pairs-head">
+        <h2>Pairs</h2>
+        <span class="count"><span><strong id="unlocked-count"></strong> of 21</span><span class="when-open">unlocked</span><span class="when-closed" id="brief"></span>
+            <svg class="chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </summary>
+    <ol id="pair-deck" class="deck"></ol>
+
+    <div class="singles">
+        <h3><b>Repeats and octaves</b>, by degree</h3>
+        <ol id="degree-deck" class="deck"></ol>
     </div>
+
+    <div class="next">
+        <span class="next-label" id="next-label"></span>
+        <span class="chips" id="next-chips"></span>
+        <span class="togo" id="to-go"></span>
+        <span class="meter" aria-hidden="true"><span id="meter-fill"></span></span>
+    </div>
+
+    <p class="key"><span class="bars" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span> Filled = passing · tap a card for its numbers</p>
+
+    <details id="all-grids">
+        <summary>All grids</summary>
+        <div class="grids">
+            <div><h2>Up</h2><div id="grid-up" class="grid"></div></div>
+            <div><h2>Down</h2><div id="grid-down" class="grid"></div></div>
+            <div><h2>Repeats</h2><div id="grid-same" class="grid"></div></div>
+        </div>
+    </details>
 </details>
 </main>
 
@@ -584,6 +732,10 @@ const NEXT_ROUND_DELAY_MS = 1000;
 // localStorage key of the browser's copy of the log
 const LOG_KEY = "ear-training-log";
 const DEGREES = [1, 2, 3, 4, 5, 6, 7];
+// Cards per row in the Pairs section, as in its CSS
+const DECK_COLUMNS = 7;
+const LOCK_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="4.5" width="7" height="5" rx="1.2" fill="currentColor"/>'
+    + '<path d="M3.2 4.6V3.3a1.8 1.8 0 0 1 3.6 0v1.3" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>';
 
 // The two pages, by their URL hash: #pairs (or no hash, or any other) and #melodies
 const PAGE_TABS = { pairs: document.getElementById("pairs-tab"), melodies: document.getElementById("melodies-tab") };
@@ -604,9 +756,15 @@ const slotsRow = document.getElementById("slots");
 const answerText = document.getElementById("answer");
 const degreeButtons = [...document.querySelectorAll("#degrees button[data-degree]")];
 const undoButton = document.getElementById("undo");
-const scoreText = document.getElementById("score");
 const progressSection = document.getElementById("progress");
-const progressStatus = document.getElementById("progress-status");
+const unlockedCount = document.getElementById("unlocked-count");
+const briefText = document.getElementById("brief");
+const pairDeck = document.getElementById("pair-deck");
+const degreeDeck = document.getElementById("degree-deck");
+const nextLabel = document.getElementById("next-label");
+const nextChips = document.getElementById("next-chips");
+const toGoText = document.getElementById("to-go");
+const meterFill = document.getElementById("meter-fill");
 const gridUp = document.getElementById("grid-up");
 const gridDown = document.getElementById("grid-down");
 const gridSame = document.getElementById("grid-same");
@@ -636,11 +794,6 @@ let nextRoundTimer = null;
 // Tone.Sampler drops a note from _activeSources when it is released, but the note rings for another second
 let releasedSources = [];
 let droneAttackTime = 0;
-// Each page has its own score, counted since the page loaded
-const scores = {
-    pairs: { notesCorrect: 0, notesTotal: 0, roundsPerfect: 0, roundsTotal: 0 },
-    melodies: { notesCorrect: 0, notesTotal: 0, roundsPerfect: 0, roundsTotal: 0 },
-};
 // The current key batch: { id (round_id of its first question), pitchClass, questions }
 let batch = null;
 // Pitch class that a new batch avoids when there is no current one: the log's last row's, or after a page switch
@@ -657,6 +810,10 @@ let fileWritable = false;
 let fileChain = Promise.resolve();
 // A stored log file that Chrome will only let us use after a click
 let handleAwaitingPermission = null;
+// The Pairs section's cards by key ("1-5" for a pair, "4" for a degree), the one whose question types are open, and their panel
+let cards = new Map();
+let openCard = null;
+let detailRow = null;
 
 function sampleUrls() {
     const urls = {};
@@ -824,15 +981,7 @@ function undo() {
 function finishRound() {
     round.answered = true;
     const answerMs = Date.now();
-    // The page cannot change while a question is being answered
-    const score = scores[page];
     const correct = round.guesses.filter((g, i) => g === round.degrees[i]).length;
-    score.notesCorrect += correct;
-    score.notesTotal += round.degrees.length;
-    score.roundsTotal += 1;
-    if (correct === round.degrees.length) {
-        score.roundsPerfect += 1;
-    }
     logRound(answerMs, correct === round.degrees.length ? 1 : 0);
     stopAudio();
     nextRoundTimer = setTimeout(newRound, NEXT_ROUND_DELAY_MS);
@@ -956,6 +1105,8 @@ function rebuildModel() {
     if (round !== null && !round.answered && round.mode === "pair") {
         startSession(model, round.id);
     }
+    // Every card of a rebuilt log deals in, including those drawn for the empty model at page load
+    cards = new Map();
     renderProgress();
     return true;
 }
@@ -1028,23 +1179,164 @@ function showPage() {
     renderProgress();
 }
 
+function el(tag, props = {}, ...children) {
+    const node = Object.assign(document.createElement(tag), props);
+    node.append(...children);
+    return node;
+}
+
+// What the Pairs section shows at nowMs: the unlocked pairs in unlock order, the degrees in play, and what unlocks next
+function pairCards(model, nowMs) {
+    const degreesOf = (label) => label.slice(1, -1).split(",").map(Number);
+    const questionType = (id) => {
+        const { a, b } = belief(model.items[id], nowMs);
+        return { id, shown: shownPercent(a, b), passing: passes(a, b), answered: model.items[id].n > 0 };
+    };
+    // An unlocked unit is new until each of its question types has been answered once. An unlock needs every unlocked
+    // item to pass, so only the units of the most recent unlock can be new; the start units never are
+    const isNew = (unit, types) => unit > START_UNITS && types.some((type) => !type.answered);
+    // Before the order is fixed only units 1-2 are unlocked, and every order starts with them
+    const pairs = (model.order ?? STABILITY_ORDER).slice(0, model.nUnits).map((label, k) => {
+        const [lo, hi] = degreesOf(label);
+        const types = [`${lo}-${hi}-up`, `${lo}-${hi}-down`, `${hi}-${lo}-up`, `${hi}-${lo}-down`].map(questionType);
+        return { lo, hi, types, isNew: isNew(k + 1, types) };
+    });
+    const next = model.order === null ? null : model.order.slice(model.nUnits, model.nUnits + UNITS_PER_UNLOCK).map(degreesOf);
+    // A degree's repeat and octaves come with the first unit that holds it
+    const degrees = [];
+    for (const g of DEGREES) {
+        const unit = model.unitOf[`${g}-${g}-same`];
+        if (unit <= model.nUnits) {
+            const types = [`${g}-${g}-same`, `${g}-${g}-up`, `${g}-${g}-down`].map(questionType);
+            degrees.push({ degree: g, types, isNew: isNew(unit, types) });
+        } else if (next !== null && unit <= model.nUnits + next.length) {
+            degrees.push({ degree: g, next: true });
+        }
+    }
+    const types = [...pairs, ...degrees].flatMap((card) => card.types ?? []);
+    return { pairs, locked: UNITS.length - model.nUnits, degrees, next, passing: types.filter((type) => type.passing).length, total: types.length };
+}
+
+function pairLabel(lo, hi, className) {
+    return el("span", { className }, `${lo}`, el("span", { className: "dash" }, "–"), `${hi}`);
+}
+
+// "1↗3", or "Repeat", "Octave ↑" and "Octave ↓" for a degree's own items
+function typeName(id) {
+    const { degrees: [a, b], direction } = ITEMS[id];
+    if (a === b) {
+        return el("span", { className: "type-name" }, { same: "Repeat", up: "Octave ↑", down: "Octave ↓" }[direction]);
+    }
+    return el("span", { className: "type-name" }, `${a}`, el("b", {}, direction === "up" ? "↗" : "↘"), `${b}`);
+}
+
+// An unlocked card: its label over one segment per question type, filled while that type passes
+function card(label, name, types, isNew) {
+    const passing = types.filter((type) => type.passing).length;
+    const done = passing === types.length;
+    const ariaLabel = `${name}, ${passing} of ${types.length} passing${isNew ? ", new" : ""}`;
+    return el("button", { type: "button", className: `card${done ? " done" : ""}${isNew ? " new" : ""}`, ariaLabel }, label,
+        el("span", { className: "bars", ariaHidden: "true" }, ...types.map((type) => el("i", { className: type.passing ? "on" : "" }))));
+}
+
+function renderPairCards(now) {
+    const view = pairCards(model, now);
+    const shownBefore = cards;
+    // The cards are rebuilt, so the focused one hands its focus to its successor
+    const focusedKey = [...shownBefore].find(([, { node }]) => node === document.activeElement)?.[0];
+    cards = new Map();
+    // A card not shown before deals in, so a refresh after an answer moves only newly unlocked cards
+    const place = (deck, key, node, detail = null) => {
+        if (!shownBefore.has(key)) {
+            node.classList.add("enter");
+            node.style.setProperty("--i", cards.size);
+        }
+        if (detail !== null) {
+            node.addEventListener("click", () => {
+                openCard = openCard === key ? null : key;
+                showDetail(true);
+            });
+        }
+        const cell = el("li", {}, node);
+        deck.append(cell);
+        cards.set(key, { deck, cell, node, ...detail });
+    };
+    pairDeck.replaceChildren();
+    degreeDeck.replaceChildren();
+    for (const { lo, hi, types, isNew } of view.pairs) {
+        const node = card(pairLabel(lo, hi, "label"), `${lo}–${hi}`, types, isNew);
+        if (isNew) {
+            node.append(el("span", { className: "tag" }, "New"));
+        }
+        place(pairDeck, `${lo}-${hi}`, node, { title: `${lo}–${hi}`, types });
+    }
+    // Every locked pair folded into one slot
+    if (view.locked > 0) {
+        const ariaLabel = `${view.locked} ${view.locked === 1 ? "pair" : "pairs"} still locked`;
+        place(pairDeck, "locked", el("span", { className: "card ghost", role: "img", ariaLabel },
+            el("span", { className: "label" }, `+${view.locked}`), el("span", { className: "hint", innerHTML: LOCK_ICON })));
+    }
+    // The halo alone marks a new degree
+    for (const { degree, types, isNew, next } of view.degrees) {
+        const label = el("span", { className: "label" }, `${degree}`);
+        if (next) {
+            place(degreeDeck, `next-${degree}`, el("span", { className: "card ghost", role: "img", ariaLabel: `Degree ${degree}, next` },
+                label, el("span", { className: "hint" }, "Next")));
+        } else {
+            place(degreeDeck, `${degree}`, card(label, `Degree ${degree}`, types, isNew), { title: `Degree ${degree}`, types });
+        }
+    }
+    cards.get(focusedKey)?.node.focus({ preventScroll: true });
+
+    const toGo = view.total - view.passing;
+    const allUnlocked = view.locked === 0;
+    unlockedCount.textContent = model.nUnits;
+    nextLabel.textContent = allUnlocked ? "All unlocked" : "Next";
+    // The order is fixed by the first pair answer
+    nextChips.replaceChildren(...(view.next === null ? ["2 random pairs"] : view.next.map(([lo, hi]) => pairLabel(lo, hi, "chip"))));
+    const toGoWords = allUnlocked ? "below the bar" : "to go";
+    toGoText.replaceChildren(el("strong", {}, `${toGo}`), ` question type${toGo === 1 ? "" : "s"} ${toGoWords}`);
+    meterFill.style.width = `${(100 * view.passing) / view.total}%`;
+    const nextNames = view.next === null ? "2 random pairs" : view.next.map(([lo, hi]) => `${lo}–${hi}`).join(", ");
+    briefText.textContent = allUnlocked ? `· ${toGo} below the bar` : `· ${toGo} to go · next ${nextNames}`;
+    showDetail(false);
+}
+
+// The open card's question types with their grid numbers, in a panel under the card's row
+function showDetail(animate) {
+    detailRow?.remove();
+    detailRow = null;
+    cards.forEach(({ node, types }, key) => {
+        if (types !== undefined) {
+            node.ariaPressed = String(key === openCard);
+        }
+    });
+    const open = cards.get(openCard);
+    if (open === undefined) {
+        return;
+    }
+    const passing = open.types.filter((type) => type.passing).length;
+    detailRow = el("li", { className: animate ? "detail enter" : "detail" },
+        el("div", { className: "detail-head" },
+            el("b", {}, open.title),
+            el("span", {}, `${passing} of ${open.types.length} passing`),
+            el("span", { className: "mark" }, `${Math.round(100 * BAR)} passes`)),
+        el("div", { className: "types" }, ...open.types.map((type) => el("div", { className: type.passing ? "type pass" : "type" },
+            typeName(type.id), el("span", { className: "type-num" }, `${type.shown}`)))));
+    const cells = [...open.deck.children];
+    const k = cells.indexOf(open.cell);
+    detailRow.style.setProperty("--n", open.types.length);
+    detailRow.style.setProperty("--col", k % DECK_COLUMNS);
+    cells[Math.min(cells.length - 1, k - (k % DECK_COLUMNS) + DECK_COLUMNS - 1)].after(detailRow);
+}
+
 function renderProgress() {
     progressSection.hidden = page !== "pairs" || logFailed;
     if (progressSection.hidden) {
         return;
     }
     const now = Date.now();
-    const unlocked = unlockedIds(model);
-    const below = unlocked.filter((id) => !itemPasses(model.items[id], now)).length;
-    if (model.nUnits === UNITS.length) {
-        progressStatus.textContent = `All pairs unlocked · ${below} of ${unlocked.length} below the bar`;
-    } else {
-        // The order is fixed by the first pair answer; units 1-2 are the same in every order
-        const next = model.order === null
-            ? "2 random pairs"
-            : model.order.slice(model.nUnits, model.nUnits + UNITS_PER_UNLOCK).join(", ");
-        progressStatus.textContent = `Pairs ${model.nUnits}/${UNITS.length} · ${below} of ${unlocked.length} items below the bar · next: ${next}`;
-    }
+    renderPairCards(now);
     fillGrid(gridUp, DEGREES.map((a) => [a, DEGREES.map((b) => `${a}-${b}-up`)]), now);
     fillGrid(gridDown, DEGREES.map((a) => [a, DEGREES.map((b) => `${a}-${b}-down`)]), now);
     fillGrid(gridSame, [["", DEGREES.map((g) => `${g}-${g}-same`)]], now);
@@ -1087,10 +1379,6 @@ function render() {
     undoButton.disabled = !answering || round.guesses.length === 0;
     replayAllButton.disabled = round === null;
     replayNotesButton.disabled = round === null;
-    const score = scores[page];
-    scoreText.textContent = round === null && score.roundsTotal === 0
-        ? ""
-        : `Notes ${score.notesCorrect}/${score.notesTotal} · Perfect rounds ${score.roundsPerfect}/${score.roundsTotal}`;
 
     slotsRow.replaceChildren();
     answerText.textContent = "";
