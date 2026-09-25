@@ -69,8 +69,8 @@
     select, input[type="number"] { color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.25rem 0.4rem; }
     input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
     #length-input { width: 3.5rem; }
-    #tempo-input { width: 14rem; max-width: 40vw; }
-    #tempo-value { min-width: 2.2rem; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+    #tempo-input, #cadence-input { width: 14rem; max-width: 40vw; }
+    #tempo-value, #cadence-value { min-width: 2.2rem; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
     button { color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.55rem 0.95rem; cursor: pointer; }
     button:hover:not(:disabled) { border-color: var(--accent); }
     button:disabled { opacity: 0.4; cursor: default; }
@@ -192,6 +192,9 @@
         .singles .card { height: 54px; gap: 9px; }
     }
 
+    /* Single notes: one question type per card, so one segment, as wide as a degree card's three */
+    .solo .bars i, .solo .card.done .bars i { width: 28px; border-radius: 2px; }
+
     /* Cards deal in when they first appear; a refresh after an answer moves nothing */
     .card.enter { animation: deal 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--i) * 22ms); }
     .card.new { animation: glow 2.8s ease-in-out 1s infinite; }
@@ -212,7 +215,8 @@
 <h1>Scale degree ear training</h1>
 
 <nav class="tabs">
-    <button id="pairs-tab" aria-current="page" disabled>Pair training</button>
+    <button id="single-tab" aria-current="page" disabled>Single notes</button>
+    <button id="pairs-tab" disabled>Pair training</button>
     <button id="melodies-tab" disabled>Melodies</button>
 </nav>
 
@@ -220,6 +224,7 @@
     <label id="length-setting" hidden>Notes <input id="length-input" type="number" min="1" max="8" value="3"></label>
     <label><input id="drone-checkbox" type="checkbox"> Drone</label>
     <label>Speed <input id="tempo-input" type="range" min="40" max="200" step="5" value="75"> <span id="tempo-value">75</span> BPM</label>
+    <label>Cadence <input id="cadence-input" type="range" min="40" max="160" step="1" value="86"> <span id="cadence-value">86</span> BPM</label>
     <span><button id="choose-file">Open log file</button> <button id="new-file">New log file</button> <span id="file-name"></span></span>
 </div>
 <p id="log-line"></p>
@@ -248,6 +253,15 @@
     <button id="undo" disabled>Undo</button>
 </div>
 
+<details id="single-progress" class="pairs solo">
+    <summary class="pairs-head">
+        <h2>Single notes</h2>
+        <span class="count"><span><strong id="single-passing"></strong> of 7 passing</span>
+            <svg class="chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </summary>
+    <ol id="single-deck" class="deck"></ol>
+    <p class="key"><span class="bars" aria-hidden="true"><i class="on"></i></span> Filled = passing · tap a card for its number</p>
+</details>
 
 <details id="progress" class="pairs">
     <summary class="pairs-head">
@@ -290,7 +304,8 @@ if (navigator.audioSession) {
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.5.42/Tone.min.js" integrity="sha512-3Yzf+4I4avnWsClLvR+r5vxjH47n2nynxA1N/+xy+drJlSjWruU+0D4EKWlKaN/wPs9FnBUb0+gozc+tnHXiRQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script id="model">
-// The pair-training model of design/final-spec.md: pure code with no DOM or Tone.js, so web-tests/ can load it in node
+// The pair-training and single-note models of design/final-spec.md: pure code with no DOM or Tone.js, so web-tests/ can
+// load it in node
 const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
 const KEY_NAMES = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 // Every note lies in [tonic + LOW, tonic + HIGH]: two octaves, from the 5 below the tonic to the 5 above the upper tonic
@@ -305,7 +320,7 @@ const CONFIDENCE = 0.9;
 // Starting half-life in days, which is also its floor after a miss
 const H0 = 1;
 const DAY_MS = 86400000;
-// Pair questions per item per session
+// Questions per item per session, in each mode
 const CAP = 20;
 const SESSION_GAP_MS = 30 * 60 * 1000;
 const QUESTIONS_PER_KEY = 10;
@@ -432,14 +447,16 @@ function placeItem(id, tonic) {
     return { degrees: [...degrees], midis: [tonic + x, tonic + x + d] };
 }
 
+// A uniform position of the degree in the register: a single note, or a note of a melody
+function placeDegree(degree, tonic) {
+    const positions = placements(degree, 0);
+    return tonic + positions[randomInt(positions.length)];
+}
+
 // Each note independently gets a uniform degree, then a uniform position of that degree in the register
 function freeQuestion(length, tonic) {
     const degrees = Array.from({ length }, () => 1 + randomInt(7));
-    const midis = degrees.map((degree) => {
-        const positions = placements(degree, 0);
-        return tonic + positions[randomInt(positions.length)];
-    });
-    return { degrees, midis };
+    return { degrees, midis: degrees.map((degree) => placeDegree(degree, tonic)) };
 }
 
 // ---- Beta tail, pass test and grid number (sections 4.5 and 4.6)
@@ -510,6 +527,10 @@ function shownPercent(a, b) {
 
 // ---- Model, sessions, unlocking and selection (sections 4-7)
 
+function freshItem() {
+    return { S: 0, F: 0, h: H0, t: null, n: 0, r: 0 };
+}
+
 // The first pair answer fixes the unit order, unless one is given (the parity tests give the stability order)
 function freshModel(order = null) {
     return {
@@ -517,11 +538,23 @@ function freshModel(order = null) {
         order,
         // Each item's unit. Before the order is fixed only units 1-2 are unlocked, and every order starts with them
         unitOf: unitsOf(order ?? STABILITY_ORDER),
-        items: Object.fromEntries(ITEM_IDS.map((id) => [id, { S: 0, F: 0, h: H0, t: null, n: 0, r: 0 }])),
+        items: Object.fromEntries(ITEM_IDS.map((id) => [id, freshItem()])),
         // The session: pair questions per item, the item just asked and the time of the last pair answer
         counts: {},
         lastItem: null,
-        lastPairAnswerMs: null,
+        lastAnswerMs: null,
+    };
+}
+
+// Single notes (section 17): one item per degree, all in play, with a session of their own
+const SINGLE_IDS = ["1", "2", "3", "4", "5", "6", "7"];
+
+function freshSingleModel() {
+    return {
+        items: Object.fromEntries(SINGLE_IDS.map((id) => [id, freshItem()])),
+        counts: {},
+        lastItem: null,
+        lastAnswerMs: null,
     };
 }
 
@@ -549,16 +582,35 @@ function itemPasses(item, nowMs) {
     return passes(a, b);
 }
 
-// Runs at the start of every pair question; returns whether a new session started
-function startSession(model, startMs) {
-    const afterBreak = model.lastPairAnswerMs === null || startMs - model.lastPairAnswerMs > SESSION_GAP_MS;
-    const allCapped = unlockedIds(model).every((id) => (model.counts[id] ?? 0) >= CAP);
+// Runs at the start of every question of the model's mode, over the items in play (ids: the unlocked pair items, or
+// SINGLE_IDS); returns whether a new session started
+function startSession(model, startMs, ids = unlockedIds(model)) {
+    const afterBreak = model.lastAnswerMs === null || startMs - model.lastAnswerMs > SESSION_GAP_MS;
+    const allCapped = ids.every((id) => (model.counts[id] ?? 0) >= CAP);
     if (!afterBreak && !allCapped) {
         return false;
     }
     model.counts = {};
     model.lastItem = null;
     return true;
+}
+
+// Section 4.4, y = 1 for a right answer
+function updateItem(item, y, tMs) {
+    const w = fade(item, tMs);
+    item.h = y === 1 ? item.h * (2 - w) : Math.max(H0, item.h * w);
+    item.S = w * item.S + y;
+    item.F = w * item.F + (1 - y);
+    item.t = tMs;
+    item.n += 1;
+    item.r += y;
+}
+
+// The session bookkeeping after each answer of the model's mode
+function countAnswer(model, id, tMs) {
+    model.counts[id] = (model.counts[id] ?? 0) + 1;
+    model.lastItem = id;
+    model.lastAnswerMs = tMs;
 }
 
 // Records the answer (y = 1 when both notes were right) at tMs to the pair question started at roundId;
@@ -571,27 +623,24 @@ function recordAnswer(model, roundId, id, y, tMs) {
     }
     // Only a rebuild can meet an item of a locked unit; the units up to its own stay unlocked
     model.nUnits = Math.max(model.nUnits, model.unitOf[id]);
-    const item = model.items[id];
-    const w = fade(item, tMs);
-    item.h = y === 1 ? item.h * (2 - w) : Math.max(H0, item.h * w);
-    item.S = w * item.S + y;
-    item.F = w * item.F + (1 - y);
-    item.t = tMs;
-    item.n += 1;
-    item.r += y;
+    updateItem(model.items[id], y, tMs);
     const unlocked = model.nUnits < UNITS.length && unlockedIds(model).every((other) => itemPasses(model.items[other], tMs));
     if (unlocked) {
         model.nUnits = Math.min(UNITS.length, model.nUnits + UNITS_PER_UNLOCK);
     }
-    model.counts[id] = (model.counts[id] ?? 0) + 1;
-    model.lastItem = id;
-    model.lastPairAnswerMs = tMs;
+    countAnswer(model, id, tMs);
     return unlocked;
 }
 
-// The items the next pair question is drawn from, in canonical order, with weights (1 - L)^2, L = mean - sd
-function selectionWeights(model, nowMs) {
-    const under = unlockedIds(model).filter((id) => (model.counts[id] ?? 0) < CAP);
+// Records the answer (y = 1 when right) at tMs to a single question; single notes have no units
+function recordSingle(singleModel, id, y, tMs) {
+    updateItem(singleModel.items[id], y, tMs);
+    countAnswer(singleModel, id, tMs);
+}
+
+// The items the next question is drawn from, in canonical order, with weights (1 - L)^2, L = mean - sd
+function selectionWeights(model, nowMs, ids = unlockedIds(model)) {
+    const under = ids.filter((id) => (model.counts[id] ?? 0) < CAP);
     const notLast = under.filter((id) => id !== model.lastItem);
     const allowed = notLast.length > 0 ? notLast : under;
     const failing = allowed.filter((id) => !itemPasses(model.items[id], nowMs));
@@ -605,8 +654,8 @@ function selectionWeights(model, nowMs) {
 }
 
 // The first pool item whose running sum of weights exceeds u times the total, with u uniform in [0, 1)
-function chooseItem(model, nowMs) {
-    const pool = selectionWeights(model, nowMs);
+function chooseItem(model, nowMs, ids = unlockedIds(model)) {
+    const pool = selectionWeights(model, nowMs, ids);
     const total = pool.reduce((sum, entry) => sum + entry.weight, 0);
     const target = Math.random() * total;
     let running = 0;
@@ -622,13 +671,15 @@ function chooseItem(model, nowMs) {
 
 // ---- The CSV log and the rebuild (sections 9 and 10)
 
-// One line per note of an answered round, each ending in "\n"
+// One line per note of an answered round, each ending in "\n". The item is "5-1" (direction "up") for a pair question,
+// the degree for a single note, and empty for a melody
 function csvLines(round, answerMs, speedBpm, droneOn) {
     const timestamp = new Date(answerMs).toISOString();
-    const pair = round.item === null ? "" : ITEMS[round.item].degrees.join("-");
-    const direction = round.item === null ? "" : ITEMS[round.item].direction;
+    const pair = round.mode === "pair";
+    const item = pair ? ITEMS[round.item].degrees.join("-") : (round.item ?? "");
+    const direction = pair ? ITEMS[round.item].direction : "";
     return round.degrees.map((degree, i) => [
-        timestamp, round.id, round.batchId, round.qInBatch, round.mode, pair, direction, round.keyName, round.tonic,
+        timestamp, round.id, round.batchId, round.qInBatch, round.mode, item, direction, round.keyName, round.tonic,
         speedBpm, droneOn ? 1 : 0, round.replaysAll, round.replaysNotes, i + 1, degree, round.midis[i], round.guesses[i],
         round.guesses[i] === degree ? 1 : 0,
     ].join(",") + "\n").join("");
@@ -636,10 +687,13 @@ function csvLines(round, answerMs, speedBpm, droneOn) {
 
 const COLUMN = Object.fromEntries(CSV_HEADER.split(",").map((name, k) => [name, k]));
 
-// Replays a log through the live code (startSession, recordAnswer); throws if the log must not be used.
+// Replays a log through the live code (startSession, recordAnswer, recordSingle); throws if the log must not be used.
 // Only the parity tests pass a unit order
 function rebuild(text, order = null) {
-    const result = { model: freshModel(order), lastKey: null, rows: 0, pairQuestions: 0, freeQuestions: 0 };
+    const result = {
+        model: freshModel(order), singleModel: freshSingleModel(), lastKey: null, rows: 0, pairQuestions: 0, singleQuestions: 0,
+        freeQuestions: 0,
+    };
     if (text === "") {
         return result;
     }
@@ -660,11 +714,21 @@ function rebuild(text, order = null) {
             result.freeQuestions += 1;
             return;
         }
+        const y = question.right ? 1 : 0;
+        if (question.mode === "single") {
+            if (question.rows !== 1) {
+                throw new Error(`single question ${question.roundId} has ${question.rows} rows`);
+            }
+            startSession(result.singleModel, question.roundId, SINGLE_IDS);
+            recordSingle(result.singleModel, question.id, y, question.answerMs);
+            result.singleQuestions += 1;
+            return;
+        }
         if (question.rows !== 2) {
             throw new Error(`pair question ${question.roundId} has ${question.rows} rows`);
         }
         startSession(result.model, question.roundId);
-        recordAnswer(result.model, question.roundId, question.id, question.right ? 1 : 0, question.answerMs);
+        recordAnswer(result.model, question.roundId, question.id, y, question.answerMs);
         result.pairQuestions += 1;
     };
     for (const line of lines.slice(1)) {
@@ -677,15 +741,21 @@ function rebuild(text, order = null) {
             throw new Error(`correct is ${correct}`);
         }
         const mode = fields[COLUMN.mode];
-        if (mode !== "pair" && mode !== "free") {
+        if (mode !== "pair" && mode !== "single" && mode !== "free") {
             throw new Error(`mode is ${mode}`);
         }
         const roundId = Number(fields[COLUMN.round_id]);
         if (question === null || roundId !== question.roundId) {
             replay();
-            const id = `${fields[COLUMN.item]}-${fields[COLUMN.direction]}`;
+            const item = fields[COLUMN.item];
+            const direction = fields[COLUMN.direction];
+            // A single note's id is its degree, with no direction
+            const id = mode === "single" && direction === "" ? item : `${item}-${direction}`;
             if (mode === "pair" && !Object.hasOwn(ITEMS, id)) {
                 throw new Error(`unknown item ${id}`);
+            }
+            if (mode === "single" && !SINGLE_IDS.includes(id)) {
+                throw new Error(`unknown single note ${id}`);
             }
             const answerMs = Date.parse(fields[COLUMN.timestamp]);
             if (!Number.isInteger(roundId) || !Number.isInteger(answerMs)) {
@@ -710,11 +780,12 @@ const CADENCE = [
     [-5, -1, 5, 7],
     [-12, 0, 4, 7],
 ];
-const CHORD_GAP = 0.9;
-const CHORD_DURATION = 0.85;
-const FINAL_CHORD_DURATION = 1.0;
+// The cadence plays one chord per beat of its own tempo (the Cadence slider). These are in beats: 0.85 s, 1.0 s and
+// 1.4 s of the former 0.9-s beat
+const CHORD_LENGTH = 17 / 18;
+const FINAL_CHORD_BEATS = 10 / 9;
 // The first note comes this long after the final chord of the cadence starts
-const CADENCE_TO_NOTES = 1.4;
+const CADENCE_TO_NOTES_BEATS = 14 / 9;
 // With the drone on and no cadence, the notes wait for the drone's 0.8 s fade-in
 const DRONE_LEAD = 0.8;
 // Each note sounds for this fraction of the gap between notes; below 1 so a repeated note is released before it is struck again
@@ -737,13 +808,21 @@ const DECK_COLUMNS = 7;
 const LOCK_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="4.5" width="7" height="5" rx="1.2" fill="currentColor"/>'
     + '<path d="M3.2 4.6V3.3a1.8 1.8 0 0 1 3.6 0v1.3" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>';
 
-// The two pages, by their URL hash: #pairs (or no hash, or any other) and #melodies
-const PAGE_TABS = { pairs: document.getElementById("pairs-tab"), melodies: document.getElementById("melodies-tab") };
+// The three pages, by their URL hash: #single (or no hash, or any other), #pairs and #melodies
+const PAGE_TABS = {
+    single: document.getElementById("single-tab"),
+    pairs: document.getElementById("pairs-tab"),
+    melodies: document.getElementById("melodies-tab"),
+};
+// What each page's questions are logged as
+const PAGE_MODES = { single: "single", pairs: "pair", melodies: "free" };
 const lengthSetting = document.getElementById("length-setting");
 const lengthInput = document.getElementById("length-input");
 const droneCheckbox = document.getElementById("drone-checkbox");
 const tempoInput = document.getElementById("tempo-input");
 const tempoValue = document.getElementById("tempo-value");
+const cadenceInput = document.getElementById("cadence-input");
+const cadenceValue = document.getElementById("cadence-value");
 const chooseFileButton = document.getElementById("choose-file");
 const newFileButton = document.getElementById("new-file");
 const fileNameText = document.getElementById("file-name");
@@ -756,6 +835,9 @@ const slotsRow = document.getElementById("slots");
 const answerText = document.getElementById("answer");
 const degreeButtons = [...document.querySelectorAll("#degrees button[data-degree]")];
 const undoButton = document.getElementById("undo");
+const singleSection = document.getElementById("single-progress");
+const singlePassing = document.getElementById("single-passing");
+const singleDeck = document.getElementById("single-deck");
 const progressSection = document.getElementById("progress");
 const unlockedCount = document.getElementById("unlocked-count");
 const briefText = document.getElementById("brief");
@@ -800,6 +882,7 @@ let batch = null;
 // the last batch's (-1 for none)
 let lastPitchClass = -1;
 let model = freshModel();
+let singleModel = freshSingleModel();
 // The log. logText is the longest known copy; the browser copy (localStorage) and the optional file are prefixes of it
 let logText = "";
 let logFailed = false;
@@ -810,7 +893,8 @@ let fileWritable = false;
 let fileChain = Promise.resolve();
 // A stored log file that Chrome will only let us use after a click
 let handleAwaitingPermission = null;
-// The Pairs section's cards by key ("1-5" for a pair, "4" for a degree), the one whose question types are open, and their panel
+// The shown section's cards by key ("1-5" for a pair, "4" for a degree, "single-4" for a single note), the one whose question
+// types are open, and their panel
 let cards = new Map();
 let openCard = null;
 let detailRow = null;
@@ -831,7 +915,7 @@ function toNote(midi) {
 }
 
 function pageFromHash() {
-    return location.hash === "#melodies" ? "melodies" : "pairs";
+    return { "#pairs": "pairs", "#melodies": "melodies" }[location.hash] ?? "single";
 }
 
 function readLength() {
@@ -879,14 +963,15 @@ function play(withCadence) {
     let droneStart = start;
     let melodyStart = start;
     if (withCadence) {
+        const beat = 60 / Number(cadenceInput.value);
         CADENCE.forEach((chord, i) => {
             const notes = chord.map((offset) => toNote(tonic + offset));
-            const duration = i === CADENCE.length - 1 ? FINAL_CHORD_DURATION : CHORD_DURATION;
-            schedulePiano(notes, start + i * CHORD_GAP, duration, 0.6);
+            const beats = i === CADENCE.length - 1 ? FINAL_CHORD_BEATS : CHORD_LENGTH;
+            schedulePiano(notes, start + i * beat, beats * beat, 0.6);
         });
         // The drone fades in under the final chord
-        droneStart = start + (CADENCE.length - 1) * CHORD_GAP;
-        melodyStart = droneStart + CADENCE_TO_NOTES;
+        droneStart = start + (CADENCE.length - 1) * beat;
+        melodyStart = droneStart + CADENCE_TO_NOTES_BEATS * beat;
     } else if (droneCheckbox.checked) {
         melodyStart = start + DRONE_LEAD;
     }
@@ -921,8 +1006,8 @@ function play(withCadence) {
 }
 
 function newRound() {
-    // After a log failure the Pair training page starts no more questions, so the auto-advance does nothing there
-    if (logFailed && page === "pairs") {
+    // After a log failure only the Melodies page starts questions, so the auto-advance does nothing on the others
+    if (logFailed && page !== "melodies") {
         return;
     }
     // No skipping: a click that waited for file permission must not replace a question started meanwhile (after a tab switch)
@@ -942,6 +1027,10 @@ function newRound() {
         startSession(model, roundId);
         item = chooseItem(model, roundId);
         question = placeItem(item, tonic);
+    } else if (page === "single") {
+        startSession(singleModel, roundId, SINGLE_IDS);
+        item = chooseItem(singleModel, roundId, SINGLE_IDS);
+        question = { degrees: [Number(item)], midis: [placeDegree(Number(item), tonic)] };
     } else {
         question = freeQuestion(readLength(), tonic);
     }
@@ -949,7 +1038,7 @@ function newRound() {
         id: roundId,
         batchId: batch.id,
         qInBatch: batch.questions,
-        mode: item === null ? "free" : "pair",
+        mode: PAGE_MODES[page],
         item,
         tonic,
         keyName: KEY_NAMES[batch.pitchClass],
@@ -987,7 +1076,7 @@ function finishRound() {
     nextRoundTimer = setTimeout(newRound, NEXT_ROUND_DELAY_MS);
 }
 
-// Saves the answered round to the log, then updates the model with a pair answer (final-spec.md section 12)
+// Saves the answered round to the log, then updates the model of a pair or single answer (final-spec.md section 12)
 function logRound(answerMs, y) {
     if (logFailed) {
         return;
@@ -1003,6 +1092,8 @@ function logRound(answerMs, y) {
     }
     if (round.mode === "pair") {
         recordAnswer(model, round.id, round.item, y, answerMs);
+    } else if (round.mode === "single") {
+        recordSingle(singleModel, round.item, y, answerMs);
     }
     renderProgress();
 }
@@ -1072,12 +1163,13 @@ function syncFile(handle) {
     return fileChain;
 }
 
-// The failure path: the Pair training page starts no more questions and nothing more is written to either copy of the log
+// The failure path: the Single notes and Pair training pages start no more questions and nothing more is written to
+// either copy of the log
 function failLog(reason) {
     logFailed = true;
     fileWritable = false;
-    logLine.textContent = `Pair training is off: ${reason}. Nothing was changed.`;
-    if (page === "pairs") {
+    logLine.textContent = `Single notes and pair training are off: ${reason}. Nothing was changed.`;
+    if (page !== "melodies") {
         newRoundButton.disabled = true;
     }
     chooseFileButton.disabled = true;
@@ -1096,14 +1188,18 @@ function rebuildModel() {
     try {
         const result = rebuild(logText);
         model = result.model;
+        singleModel = result.singleModel;
         lastPitchClass = KEY_NAMES.indexOf(result.lastKey);
     } catch (error) {
         failLog(`the log could not be read (${error.message})`);
         return false;
     }
-    // A pair question in progress keeps the session step it started with
+    // A pair or single question in progress keeps the session step it started with
     if (round !== null && !round.answered && round.mode === "pair") {
         startSession(model, round.id);
+    }
+    if (round !== null && !round.answered && round.mode === "single") {
+        startSession(singleModel, round.id, SINGLE_IDS);
     }
     // Every card of a rebuilt log deals in, including those drawn for the empty model at page load
     cards = new Map();
@@ -1170,7 +1266,8 @@ async function askFilePermission() {
     }
 }
 
-// Marks the current tab and shows only this page's controls: Notes on Melodies, the progress display on Pair training
+// Marks the current tab and shows only this page's controls: Notes on Melodies, the progress display on Single notes and
+// on Pair training
 function showPage() {
     for (const [name, tab] of Object.entries(PAGE_TABS)) {
         tab.ariaCurrent = name === page ? "page" : null;
@@ -1185,13 +1282,16 @@ function el(tag, props = {}, ...children) {
     return node;
 }
 
+// A card's question type at nowMs: its grid number, whether it passes, and whether it has been answered
+function typeOf(items, id, nowMs) {
+    const { a, b } = belief(items[id], nowMs);
+    return { id, shown: shownPercent(a, b), passing: passes(a, b), answered: items[id].n > 0 };
+}
+
 // What the Pairs section shows at nowMs: the unlocked pairs in unlock order, the degrees in play, and what unlocks next
 function pairCards(model, nowMs) {
     const degreesOf = (label) => label.slice(1, -1).split(",").map(Number);
-    const questionType = (id) => {
-        const { a, b } = belief(model.items[id], nowMs);
-        return { id, shown: shownPercent(a, b), passing: passes(a, b), answered: model.items[id].n > 0 };
-    };
+    const questionType = (id) => typeOf(model.items, id, nowMs);
     // An unlocked unit is new until each of its question types has been answered once. An unlock needs every unlocked
     // item to pass, so only the units of the most recent unlock can be new; the start units never are
     const isNew = (unit, types) => unit > START_UNITS && types.some((type) => !type.answered);
@@ -1221,8 +1321,11 @@ function pairLabel(lo, hi, className) {
     return el("span", { className }, `${lo}`, el("span", { className: "dash" }, "–"), `${hi}`);
 }
 
-// "1↗3", or "Repeat", "Octave ↑" and "Octave ↓" for a degree's own items
+// "1↗3", or "Repeat", "Octave ↑" and "Octave ↓" for a degree's own items, or "Single note"
 function typeName(id) {
+    if (SINGLE_IDS.includes(id)) {
+        return el("span", { className: "type-name" }, "Single note");
+    }
     const { degrees: [a, b], direction } = ITEMS[id];
     if (a === b) {
         return el("span", { className: "type-name" }, { same: "Repeat", up: "Octave ↑", down: "Octave ↓" }[direction]);
@@ -1230,22 +1333,29 @@ function typeName(id) {
     return el("span", { className: "type-name" }, `${a}`, el("b", {}, direction === "up" ? "↗" : "↘"), `${b}`);
 }
 
+// "3 of 4 passing"; a single note's card has one question type, which is passing or below the bar
+function passingText(types) {
+    const passing = types.filter((type) => type.passing).length;
+    if (types.length === 1) {
+        return passing === 1 ? "passing" : "below the bar";
+    }
+    return `${passing} of ${types.length} passing`;
+}
+
 // An unlocked card: its label over one segment per question type, filled while that type passes
 function card(label, name, types, isNew) {
-    const passing = types.filter((type) => type.passing).length;
-    const done = passing === types.length;
-    const ariaLabel = `${name}, ${passing} of ${types.length} passing${isNew ? ", new" : ""}`;
+    const done = types.every((type) => type.passing);
+    const ariaLabel = `${name}, ${passingText(types)}${isNew ? ", new" : ""}`;
     return el("button", { type: "button", className: `card${done ? " done" : ""}${isNew ? " new" : ""}`, ariaLabel }, label,
         el("span", { className: "bars", ariaHidden: "true" }, ...types.map((type) => el("i", { className: type.passing ? "on" : "" }))));
 }
 
-function renderPairCards(now) {
-    const view = pairCards(model, now);
+// Rebuilds the shown section's cards: fill(place) adds each card to a deck. A card not shown before deals in, so a refresh
+// after an answer moves only newly unlocked cards; the focused card hands its focus to its successor; the open card stays open
+function dealCards(fill) {
     const shownBefore = cards;
-    // The cards are rebuilt, so the focused one hands its focus to its successor
     const focusedKey = [...shownBefore].find(([, { node }]) => node === document.activeElement)?.[0];
     cards = new Map();
-    // A card not shown before deals in, so a refresh after an answer moves only newly unlocked cards
     const place = (deck, key, node, detail = null) => {
         if (!shownBefore.has(key)) {
             node.classList.add("enter");
@@ -1261,32 +1371,40 @@ function renderPairCards(now) {
         deck.append(cell);
         cards.set(key, { deck, cell, node, ...detail });
     };
-    pairDeck.replaceChildren();
-    degreeDeck.replaceChildren();
-    for (const { lo, hi, types, isNew } of view.pairs) {
-        const node = card(pairLabel(lo, hi, "label"), `${lo}–${hi}`, types, isNew);
-        if (isNew) {
-            node.append(el("span", { className: "tag" }, "New"));
-        }
-        place(pairDeck, `${lo}-${hi}`, node, { title: `${lo}–${hi}`, types });
-    }
-    // Every locked pair folded into one slot
-    if (view.locked > 0) {
-        const ariaLabel = `${view.locked} ${view.locked === 1 ? "pair" : "pairs"} still locked`;
-        place(pairDeck, "locked", el("span", { className: "card ghost", role: "img", ariaLabel },
-            el("span", { className: "label" }, `+${view.locked}`), el("span", { className: "hint", innerHTML: LOCK_ICON })));
-    }
-    // The halo alone marks a new degree
-    for (const { degree, types, isNew, next } of view.degrees) {
-        const label = el("span", { className: "label" }, `${degree}`);
-        if (next) {
-            place(degreeDeck, `next-${degree}`, el("span", { className: "card ghost", role: "img", ariaLabel: `Degree ${degree}, next` },
-                label, el("span", { className: "hint" }, "Next")));
-        } else {
-            place(degreeDeck, `${degree}`, card(label, `Degree ${degree}`, types, isNew), { title: `Degree ${degree}`, types });
-        }
-    }
+    fill(place);
     cards.get(focusedKey)?.node.focus({ preventScroll: true });
+    showDetail(false);
+}
+
+function renderPairCards(now) {
+    const view = pairCards(model, now);
+    dealCards((place) => {
+        pairDeck.replaceChildren();
+        degreeDeck.replaceChildren();
+        for (const { lo, hi, types, isNew } of view.pairs) {
+            const node = card(pairLabel(lo, hi, "label"), `${lo}–${hi}`, types, isNew);
+            if (isNew) {
+                node.append(el("span", { className: "tag" }, "New"));
+            }
+            place(pairDeck, `${lo}-${hi}`, node, { title: `${lo}–${hi}`, types });
+        }
+        // Every locked pair folded into one slot
+        if (view.locked > 0) {
+            const ariaLabel = `${view.locked} ${view.locked === 1 ? "pair" : "pairs"} still locked`;
+            place(pairDeck, "locked", el("span", { className: "card ghost", role: "img", ariaLabel },
+                el("span", { className: "label" }, `+${view.locked}`), el("span", { className: "hint", innerHTML: LOCK_ICON })));
+        }
+        // The halo alone marks a new degree
+        for (const { degree, types, isNew, next } of view.degrees) {
+            const label = el("span", { className: "label" }, `${degree}`);
+            if (next) {
+                place(degreeDeck, `next-${degree}`, el("span", { className: "card ghost", role: "img", ariaLabel: `Degree ${degree}, next` },
+                    label, el("span", { className: "hint" }, "Next")));
+            } else {
+                place(degreeDeck, `${degree}`, card(label, `Degree ${degree}`, types, isNew), { title: `Degree ${degree}`, types });
+            }
+        }
+    });
 
     const toGo = view.total - view.passing;
     const allUnlocked = view.locked === 0;
@@ -1299,7 +1417,19 @@ function renderPairCards(now) {
     meterFill.style.width = `${(100 * view.passing) / view.total}%`;
     const nextNames = view.next === null ? "2 random pairs" : view.next.map(([lo, hi]) => `${lo}–${hi}`).join(", ");
     briefText.textContent = allUnlocked ? `· ${toGo} below the bar` : `· ${toGo} to go · next ${nextNames}`;
-    showDetail(false);
+}
+
+// A card per degree with its one question type: one segment, filled and tinted while it passes
+function renderSingleCards(now) {
+    const types = SINGLE_IDS.map((id) => typeOf(singleModel.items, id, now));
+    dealCards((place) => {
+        singleDeck.replaceChildren();
+        for (const type of types) {
+            const node = card(el("span", { className: "label" }, type.id), `Degree ${type.id}`, [type], false);
+            place(singleDeck, `single-${type.id}`, node, { title: `Degree ${type.id}`, types: [type] });
+        }
+    });
+    singlePassing.textContent = types.filter((type) => type.passing).length;
 }
 
 // The open card's question types with their grid numbers, in a panel under the card's row
@@ -1315,11 +1445,10 @@ function showDetail(animate) {
     if (open === undefined) {
         return;
     }
-    const passing = open.types.filter((type) => type.passing).length;
     detailRow = el("li", { className: animate ? "detail enter" : "detail" },
         el("div", { className: "detail-head" },
             el("b", {}, open.title),
-            el("span", {}, `${passing} of ${open.types.length} passing`),
+            el("span", {}, passingText(open.types)),
             el("span", { className: "mark" }, `${Math.round(100 * BAR)} passes`)),
         el("div", { className: "types" }, ...open.types.map((type) => el("div", { className: type.passing ? "type pass" : "type" },
             typeName(type.id), el("span", { className: "type-num" }, `${type.shown}`)))));
@@ -1331,11 +1460,15 @@ function showDetail(animate) {
 }
 
 function renderProgress() {
+    singleSection.hidden = page !== "single" || logFailed;
     progressSection.hidden = page !== "pairs" || logFailed;
+    const now = Date.now();
+    if (!singleSection.hidden) {
+        renderSingleCards(now);
+    }
     if (progressSection.hidden) {
         return;
     }
-    const now = Date.now();
     renderPairCards(now);
     fillGrid(gridUp, DEGREES.map((a) => [a, DEGREES.map((b) => `${a}-${b}-up`)]), now);
     fillGrid(gridDown, DEGREES.map((a) => [a, DEGREES.map((b) => `${a}-${b}-down`)]), now);
@@ -1373,7 +1506,7 @@ function progressCell(id, now) {
 function render() {
     const answering = round !== null && !round.answered;
     // No skipping: a question must be answered before the next one starts or the page changes
-    newRoundButton.disabled = answering || (logFailed && page === "pairs");
+    newRoundButton.disabled = answering || (logFailed && page !== "melodies");
     Object.values(PAGE_TABS).forEach((tab) => { tab.disabled = answering; });
     degreeButtons.forEach((button) => { button.disabled = !answering; });
     undoButton.disabled = !answering || round.guesses.length === 0;
@@ -1402,11 +1535,12 @@ function render() {
         statusText.textContent = `${round.keyName} major: ${perfect ? "Correct!" : "Not quite."}`;
         answerText.textContent = `Answer: ${round.degrees.join(" ")}`;
     } else {
-        statusText.textContent = `${round.keyName} major: enter ${round.degrees.length} scale degrees.`;
+        const count = round.degrees.length;
+        statusText.textContent = `${round.keyName} major: enter ${count === 1 ? "1 scale degree" : `${count} scale degrees`}.`;
     }
 }
 
-// A page switch drops the answered question; the next one, on either page, starts a new batch with the cadence
+// A page switch drops the answered question; the next one, on any page, starts a new batch with the cadence
 function switchPage(target) {
     page = target;
     clearTimeout(nextRoundTimer);
@@ -1520,6 +1654,9 @@ document.addEventListener("keydown", (event) => {
 });
 tempoInput.addEventListener("input", () => {
     tempoValue.textContent = tempoInput.value;
+});
+cadenceInput.addEventListener("input", () => {
+    cadenceValue.textContent = cadenceInput.value;
 });
 // Clicking the spinner focuses the field, and the answer and shortcut keys are ignored while it has focus
 lengthInput.addEventListener("change", () => lengthInput.blur());
