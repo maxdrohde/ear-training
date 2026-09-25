@@ -1333,11 +1333,11 @@ function typeName(id) {
     return el("span", { className: "type-name" }, `${a}`, el("b", {}, direction === "up" ? "↗" : "↘"), `${b}`);
 }
 
-// "3 of 4 passing"; a single note's card has one question type, which is passing or below the bar
+// "3 of 4 passing"; a single note's card has one question type, which is passing or not passing yet
 function passingText(types) {
     const passing = types.filter((type) => type.passing).length;
     if (types.length === 1) {
-        return passing === 1 ? "passing" : "below the bar";
+        return passing === 1 ? "passing" : "not passing yet";
     }
     return `${passing} of ${types.length} passing`;
 }
@@ -1412,11 +1412,11 @@ function renderPairCards(now) {
     nextLabel.textContent = allUnlocked ? "All unlocked" : "Next";
     // The order is fixed by the first pair answer
     nextChips.replaceChildren(...(view.next === null ? ["2 random pairs"] : view.next.map(([lo, hi]) => pairLabel(lo, hi, "chip"))));
-    const toGoWords = allUnlocked ? "below the bar" : "to go";
+    const toGoWords = allUnlocked ? "not passing yet" : "to go";
     toGoText.replaceChildren(el("strong", {}, `${toGo}`), ` question type${toGo === 1 ? "" : "s"} ${toGoWords}`);
     meterFill.style.width = `${(100 * view.passing) / view.total}%`;
     const nextNames = view.next === null ? "2 random pairs" : view.next.map(([lo, hi]) => `${lo}–${hi}`).join(", ");
-    briefText.textContent = allUnlocked ? `· ${toGo} below the bar` : `· ${toGo} to go · next ${nextNames}`;
+    briefText.textContent = allUnlocked ? `· ${toGo} not passing yet` : `· ${toGo} to go · next ${nextNames}`;
 }
 
 // A card per degree with its one question type: one segment, filled and tinted while it passes
@@ -1449,9 +1449,10 @@ function showDetail(animate) {
         el("div", { className: "detail-head" },
             el("b", {}, open.title),
             el("span", {}, passingText(open.types)),
-            el("span", { className: "mark" }, `${Math.round(100 * BAR)} passes`)),
+            el("span", { className: "mark" }, `Pass at ${Math.round(100 * BAR)}%`)),
         el("div", { className: "types" }, ...open.types.map((type) => el("div", { className: type.passing ? "type pass" : "type" },
-            typeName(type.id), el("span", { className: "type-num" }, `${type.shown}`)))));
+            typeName(type.id), el("span", { className: "type-num" }, `${type.shown}%`)))),
+        el("p", { className: "key" }, `${Math.round(100 * CONFIDENCE)}% sure you're at least this accurate.`));
     const cells = [...open.deck.children];
     const k = cells.indexOf(open.cell);
     detailRow.style.setProperty("--n", open.types.length);
