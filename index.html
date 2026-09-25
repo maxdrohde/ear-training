@@ -40,7 +40,10 @@
     h1 { font-size: 1.35rem; font-weight: 600; margin: 0 0 1.25rem; }
     button, select, input { font: inherit; }
     .settings { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; padding: 0.9rem 1rem; background: var(--card); border: 1px solid var(--border); border-radius: 10px; color: var(--muted); font-size: 0.95rem; }
+    .tabs { display: flex; gap: 0.5rem; margin: 0 0 1rem; }
+    .tabs button[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
     .settings label { display: flex; align-items: center; gap: 0.4rem; }
+    .settings [hidden] { display: none; }
     select, input[type="number"] { color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.25rem 0.4rem; }
     input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
     #length-input { width: 3.5rem; }
@@ -64,7 +67,6 @@
     .undo-row { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
     #undo { font-size: 0.9rem; padding: 0.35rem 0.8rem; }
     #score { text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 2rem; }
-    .settings input:disabled { opacity: 0.45; }
     #choose-file, #new-file { font-size: 0.9rem; padding: 0.35rem 0.8rem; }
     #file-name { color: var(--text); }
     #log-line { color: var(--muted); font-size: 0.9rem; margin: 0.6rem 0 0; }
@@ -83,9 +85,13 @@
 <main>
 <h1>Scale degree ear training</h1>
 
+<nav class="tabs">
+    <button id="pairs-tab" aria-current="page" disabled>Pair training</button>
+    <button id="melodies-tab" disabled>Melodies</button>
+</nav>
+
 <div class="settings">
-    <label><input id="pair-checkbox" type="checkbox" checked> Pair training</label>
-    <label>Notes <input id="length-input" type="number" min="1" max="8" value="3"></label>
+    <label id="length-setting" hidden>Notes <input id="length-input" type="number" min="1" max="8" value="3"></label>
     <label><input id="drone-checkbox" type="checkbox"> Drone</label>
     <label>Speed <input id="tempo-input" type="range" min="40" max="200" step="5" value="75"> <span id="tempo-value">75</span> BPM</label>
     <span><button id="choose-file">Open log file</button> <button id="new-file">New log file</button> <span id="file-name"></span></span>
@@ -221,15 +227,51 @@ function buildUnits() {
 }
 
 const UNITS = buildUnits();
-// The canonical item order; the unlocked items are always a prefix of it
+// The canonical item order, in which items are always listed and drawn
 const ITEM_IDS = UNITS.flatMap((unit) => unit.items);
-const UNIT_OF = Object.fromEntries(UNITS.flatMap((unit, u) => unit.items.map((id) => [id, u + 1])));
-// UNIT_END[k] is the number of items in units 1 to k
-const UNIT_END = UNITS.reduce((ends, unit) => [...ends, ends[ends.length - 1] + unit.items.length], [0]);
+// Unit labels in the stability order; the learner's order keeps units 1-2 and shuffles the rest
+const STABILITY_ORDER = UNITS.map((unit) => unit.label);
 const ITEMS = Object.fromEntries(ITEM_IDS.map((id) => {
     const [a, b, direction] = id.split("-");
     return [id, { degrees: [Number(a), Number(b)], direction }];
 }));
+
+// ---- The learner's unit order (section 6.1)
+
+const MASK64 = (1n << 64n) - 1n;
+
+// SplitMix64, exact modulo 2^64; the seed is reduced modulo 2^64 first
+function splitMix64(seed) {
+    let state = BigInt.asUintN(64, BigInt(seed));
+    return () => {
+        state = (state + 0x9E3779B97F4A7C15n) & MASK64;
+        let z = state;
+        z = ((z ^ (z >> 30n)) * 0xBF58476D1CE4E5B9n) & MASK64;
+        z = ((z ^ (z >> 27n)) * 0x94D049BB133111EBn) & MASK64;
+        return z ^ (z >> 31n);
+    };
+}
+
+// Units 1-2 stay; units 3-21 of the stability order are shuffled from the last position down
+function unitOrder(seed) {
+    const next = splitMix64(seed);
+    const rest = STABILITY_ORDER.slice(START_UNITS);
+    for (let i = rest.length - 1; i >= 1; i--) {
+        const j = Number(next() % BigInt(i + 1));
+        [rest[i], rest[j]] = [rest[j], rest[i]];
+    }
+    return [...STABILITY_ORDER.slice(0, START_UNITS), ...rest];
+}
+
+// Each item's unit in an order: a pair item's is its pair's; g-g items come with the first unit that holds g
+function unitsOf(order) {
+    const position = Object.fromEntries(order.map((label, k) => [label, k + 1]));
+    const holds = (label, g) => label.slice(1, -1).split(",").map(Number).includes(g);
+    return Object.fromEntries(ITEM_IDS.map((id) => {
+        const [a, b] = ITEMS[id].degrees;
+        return [id, a === b ? 1 + order.findIndex((label) => holds(label, a)) : position[`{${Math.min(a, b)},${Math.max(a, b)}}`]];
+    }));
+}
 
 // ---- Placing a question (section 3)
 
@@ -320,9 +362,13 @@ function shownPercent(a, b) {
 
 // ---- Model, sessions, unlocking and selection (sections 4-7)
 
-function freshModel() {
+// The first pair answer fixes the unit order, unless one is given (the parity tests give the stability order)
+function freshModel(order = null) {
     return {
         nUnits: START_UNITS,
+        order,
+        // Each item's unit. Before the order is fixed only units 1-2 are unlocked, and every order starts with them
+        unitOf: unitsOf(order ?? STABILITY_ORDER),
         items: Object.fromEntries(ITEM_IDS.map((id) => [id, { S: 0, F: 0, h: H0, t: null, n: 0, r: 0 }])),
         // The session: pair questions per item, the item just asked and the time of the last pair answer
         counts: {},
@@ -332,7 +378,7 @@ function freshModel() {
 }
 
 function unlockedIds(model) {
-    return ITEM_IDS.slice(0, UNIT_END[model.nUnits]);
+    return ITEM_IDS.filter((id) => model.unitOf[id] <= model.nUnits);
 }
 
 // Weight 2^(-dt/h) of an item's evidence at nowMs; days are converted before subtracting, as in the reference
@@ -367,10 +413,16 @@ function startSession(model, startMs) {
     return true;
 }
 
-// Records a pair answer (y = 1 when both notes were right) at tMs; returns whether it unlocked new units
-function recordAnswer(model, id, y, tMs) {
+// Records the answer (y = 1 when both notes were right) at tMs to the pair question started at roundId;
+// returns whether it unlocked new units
+function recordAnswer(model, roundId, id, y, tMs) {
+    // The first pair answer fixes the unit order, seeded with its round_id, so a rebuild of the log finds the same order
+    if (model.order === null) {
+        model.order = unitOrder(roundId);
+        model.unitOf = unitsOf(model.order);
+    }
     // Only a rebuild can meet an item of a locked unit; the units up to its own stay unlocked
-    model.nUnits = Math.max(model.nUnits, UNIT_OF[id]);
+    model.nUnits = Math.max(model.nUnits, model.unitOf[id]);
     const item = model.items[id];
     const w = fade(item, tMs);
     item.h = y === 1 ? item.h * (2 - w) : Math.max(H0, item.h * w);
@@ -436,9 +488,10 @@ function csvLines(round, answerMs, speedBpm, droneOn) {
 
 const COLUMN = Object.fromEntries(CSV_HEADER.split(",").map((name, k) => [name, k]));
 
-// Replays a log through the live code (startSession, recordAnswer); throws if the log must not be used
-function rebuild(text) {
-    const result = { model: freshModel(), lastKey: null, rows: 0, pairQuestions: 0, freeQuestions: 0 };
+// Replays a log through the live code (startSession, recordAnswer); throws if the log must not be used.
+// Only the parity tests pass a unit order
+function rebuild(text, order = null) {
+    const result = { model: freshModel(order), lastKey: null, rows: 0, pairQuestions: 0, freeQuestions: 0 };
     if (text === "") {
         return result;
     }
@@ -463,7 +516,7 @@ function rebuild(text) {
             throw new Error(`pair question ${question.roundId} has ${question.rows} rows`);
         }
         startSession(result.model, question.roundId);
-        recordAnswer(result.model, question.id, question.right ? 1 : 0, question.answerMs);
+        recordAnswer(result.model, question.roundId, question.id, question.right ? 1 : 0, question.answerMs);
         result.pairQuestions += 1;
     };
     for (const line of lines.slice(1)) {
@@ -532,7 +585,9 @@ const NEXT_ROUND_DELAY_MS = 1000;
 const LOG_KEY = "ear-training-log";
 const DEGREES = [1, 2, 3, 4, 5, 6, 7];
 
-const pairCheckbox = document.getElementById("pair-checkbox");
+// The two pages, by their URL hash: #pairs (or no hash, or any other) and #melodies
+const PAGE_TABS = { pairs: document.getElementById("pairs-tab"), melodies: document.getElementById("melodies-tab") };
+const lengthSetting = document.getElementById("length-setting");
 const lengthInput = document.getElementById("length-input");
 const droneCheckbox = document.getElementById("drone-checkbox");
 const tempoInput = document.getElementById("tempo-input");
@@ -575,15 +630,21 @@ const drone = new Tone.Synth({
 
 const transport = Tone.getTransport();
 
+let page = pageFromHash();
 let round = null;
 let nextRoundTimer = null;
 // Tone.Sampler drops a note from _activeSources when it is released, but the note rings for another second
 let releasedSources = [];
 let droneAttackTime = 0;
-const score = { notesCorrect: 0, notesTotal: 0, roundsPerfect: 0, roundsTotal: 0 };
+// Each page has its own score, counted since the page loaded
+const scores = {
+    pairs: { notesCorrect: 0, notesTotal: 0, roundsPerfect: 0, roundsTotal: 0 },
+    melodies: { notesCorrect: 0, notesTotal: 0, roundsPerfect: 0, roundsTotal: 0 },
+};
 // The current key batch: { id (round_id of its first question), pitchClass, questions }
 let batch = null;
-// Pitch class of the log's last row (-1 for none), which the first batch avoids
+// Pitch class that a new batch avoids when there is no current one: the log's last row's, or after a page switch
+// the last batch's (-1 for none)
 let lastPitchClass = -1;
 let model = freshModel();
 // The log. logText is the longest known copy; the browser copy (localStorage) and the optional file are prefixes of it
@@ -610,6 +671,10 @@ function sampleUrls() {
 
 function toNote(midi) {
     return Tone.Frequency(midi, "midi").toNote();
+}
+
+function pageFromHash() {
+    return location.hash === "#melodies" ? "melodies" : "pairs";
 }
 
 function readLength() {
@@ -699,6 +764,14 @@ function play(withCadence) {
 }
 
 function newRound() {
+    // After a log failure the Pair training page starts no more questions, so the auto-advance does nothing there
+    if (logFailed && page === "pairs") {
+        return;
+    }
+    // No skipping: a click that waited for file permission must not replace a question started meanwhile (after a tab switch)
+    if (round !== null && !round.answered) {
+        return;
+    }
     const roundId = Date.now();
     if (batch === null || batch.questions === QUESTIONS_PER_KEY) {
         const previous = batch === null ? lastPitchClass : batch.pitchClass;
@@ -708,7 +781,7 @@ function newRound() {
     const tonic = tonicOf(batch.pitchClass);
     let item = null;
     let question;
-    if (pairCheckbox.checked) {
+    if (page === "pairs") {
         startSession(model, roundId);
         item = chooseItem(model, roundId);
         question = placeItem(item, tonic);
@@ -751,6 +824,8 @@ function undo() {
 function finishRound() {
     round.answered = true;
     const answerMs = Date.now();
+    // The page cannot change while a question is being answered
+    const score = scores[page];
     const correct = round.guesses.filter((g, i) => g === round.degrees[i]).length;
     score.notesCorrect += correct;
     score.notesTotal += round.degrees.length;
@@ -778,7 +853,7 @@ function logRound(answerMs, y) {
         return;
     }
     if (round.mode === "pair") {
-        recordAnswer(model, round.item, y, answerMs);
+        recordAnswer(model, round.id, round.item, y, answerMs);
     }
     renderProgress();
 }
@@ -848,13 +923,14 @@ function syncFile(handle) {
     return fileChain;
 }
 
-// The failure path: pair training stays off and nothing more is written to either copy of the log
+// The failure path: the Pair training page starts no more questions and nothing more is written to either copy of the log
 function failLog(reason) {
     logFailed = true;
     fileWritable = false;
     logLine.textContent = `Pair training is off: ${reason}. Nothing was changed.`;
-    pairCheckbox.checked = false;
-    pairCheckbox.disabled = true;
+    if (page === "pairs") {
+        newRoundButton.disabled = true;
+    }
     chooseFileButton.disabled = true;
     newFileButton.disabled = true;
     renderProgress();
@@ -943,10 +1019,18 @@ async function askFilePermission() {
     }
 }
 
+// Marks the current tab and shows only this page's controls: Notes on Melodies, the progress display on Pair training
+function showPage() {
+    for (const [name, tab] of Object.entries(PAGE_TABS)) {
+        tab.ariaCurrent = name === page ? "page" : null;
+    }
+    lengthSetting.hidden = page !== "melodies";
+    renderProgress();
+}
+
 function renderProgress() {
-    lengthInput.disabled = pairCheckbox.checked;
-    progressSection.hidden = !pairCheckbox.checked;
-    if (!pairCheckbox.checked) {
+    progressSection.hidden = page !== "pairs" || logFailed;
+    if (progressSection.hidden) {
         return;
     }
     const now = Date.now();
@@ -955,7 +1039,10 @@ function renderProgress() {
     if (model.nUnits === UNITS.length) {
         progressStatus.textContent = `All pairs unlocked · ${below} of ${unlocked.length} below the bar`;
     } else {
-        const next = UNITS.slice(model.nUnits, model.nUnits + UNITS_PER_UNLOCK).map((unit) => unit.label).join(", ");
+        // The order is fixed by the first pair answer; units 1-2 are the same in every order
+        const next = model.order === null
+            ? "2 random pairs"
+            : model.order.slice(model.nUnits, model.nUnits + UNITS_PER_UNLOCK).join(", ");
         progressStatus.textContent = `Pairs ${model.nUnits}/${UNITS.length} · ${below} of ${unlocked.length} items below the bar · next: ${next}`;
     }
     fillGrid(gridUp, DEGREES.map((a) => [a, DEGREES.map((b) => `${a}-${b}-up`)]), now);
@@ -975,7 +1062,7 @@ function fillGrid(grid, rows, now) {
 function progressCell(id, now) {
     const cell = document.createElement("span");
     cell.className = "cell";
-    if (UNIT_OF[id] > model.nUnits) {
+    if (model.unitOf[id] > model.nUnits) {
         cell.classList.add("locked");
         return cell;
     }
@@ -993,12 +1080,17 @@ function progressCell(id, now) {
 
 function render() {
     const answering = round !== null && !round.answered;
-    // No skipping: a question must be answered before the next one starts
-    newRoundButton.disabled = answering;
+    // No skipping: a question must be answered before the next one starts or the page changes
+    newRoundButton.disabled = answering || (logFailed && page === "pairs");
+    Object.values(PAGE_TABS).forEach((tab) => { tab.disabled = answering; });
     degreeButtons.forEach((button) => { button.disabled = !answering; });
     undoButton.disabled = !answering || round.guesses.length === 0;
     replayAllButton.disabled = round === null;
     replayNotesButton.disabled = round === null;
+    const score = scores[page];
+    scoreText.textContent = round === null && score.roundsTotal === 0
+        ? ""
+        : `Notes ${score.notesCorrect}/${score.notesTotal} · Perfect rounds ${score.roundsPerfect}/${score.roundsTotal}`;
 
     slotsRow.replaceChildren();
     answerText.textContent = "";
@@ -1024,8 +1116,20 @@ function render() {
     } else {
         statusText.textContent = `${round.keyName} major: enter ${round.degrees.length} scale degrees.`;
     }
+}
 
-    scoreText.textContent = `Notes ${score.notesCorrect}/${score.notesTotal} · Perfect rounds ${score.roundsPerfect}/${score.roundsTotal}`;
+// A page switch drops the answered question; the next one, on either page, starts a new batch with the cadence
+function switchPage(target) {
+    page = target;
+    clearTimeout(nextRoundTimer);
+    stopAudio(true);
+    round = null;
+    if (batch !== null) {
+        lastPitchClass = batch.pitchClass;
+        batch = null;
+    }
+    showPage();
+    render();
 }
 
 newRoundButton.addEventListener("click", async () => {
@@ -1085,7 +1189,22 @@ window.addEventListener("storage", (event) => {
         failLog("the log was changed in another tab; reload this page");
     }
 });
-pairCheckbox.addEventListener("change", renderProgress);
+// The page follows the hash, so Back and Forward switch pages too
+for (const [name, tab] of Object.entries(PAGE_TABS)) {
+    tab.addEventListener("click", () => { location.hash = `#${name}`; });
+}
+window.addEventListener("hashchange", (event) => {
+    const target = pageFromHash();
+    if (target === page) {
+        return;
+    }
+    // The tabs are disabled while a question is being answered (and while the piano loads); the page stays, and so does the URL
+    if (PAGE_TABS[target].disabled) {
+        history.replaceState(null, "", event.oldURL);
+        return;
+    }
+    switchPage(target);
+});
 degreeButtons.forEach((button) => {
     button.addEventListener("click", () => guess(Number(button.dataset.degree)));
 });
@@ -1122,6 +1241,7 @@ droneCheckbox.addEventListener("change", () => {
     }
 });
 
+showPage();
 const logLoaded = loadLog().catch((error) => failLog(`the log could not be loaded (${error.message})`));
 Tone.loaded()
     .then(() => {
